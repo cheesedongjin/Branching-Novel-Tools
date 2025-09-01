@@ -1,0 +1,838 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Branching Novel Editor (GUI)
+- 분기형 소설 문법을 직접 쓰지 않고 GUI로 작성하여 .txt를 자동 생성
+- 기능:
+  * 작품 제목(@title), 시작 챕터(@start) 설정
+  * 챕터(분기) 추가/삭제/편집: id, 제목, 본문
+  * 챕터별 선택지(버튼) 추가/삭제/편집: 버튼 문구, 이동 타깃 챕터 id
+  * 파일 신규/열기/저장/다른 이름으로 저장
+  * 현재 상태를 문법에 맞는 텍스트로 미리보기
+  * 기존 포맷(.txt) 불러오기(파싱)
+
+문법 포맷(생성 결과):
+  @title: 작품 제목
+  @start: 시작챕터ID
+
+  # chapter_id: Chapter Title
+  본문 문단1
+
+  본문 문단2
+
+  * 버튼 문구 -> target_id
+  * 버튼 문구2 -> target_id2
+
+주의:
+  - 챕터 id는 고유해야 함.
+  - 선택지 타깃은 존재하지 않는 챕터를 가리킬 수도 있으나, 저장 전 유효성 경고 제공.
+  - 본문은 에디터에서 빈 줄로 문단 구분.
+
+사용법:
+  python branching_novel_editor.py
+"""
+
+import os
+import sys
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional
+
+# ---------- 데이터 모델 ----------
+
+@dataclass
+class Choice:
+    text: str
+    target_id: str
+
+@dataclass
+class Chapter:
+    chapter_id: str
+    title: str
+    paragraphs: List[str] = field(default_factory=list)
+    choices: List[Choice] = field(default_factory=list)
+
+@dataclass
+class Story:
+    title: str = "Untitled"
+    start_id: Optional[str] = None
+    chapters: Dict[str, Chapter] = field(default_factory=dict)
+
+    def chapter_ids(self) -> List[str]:
+        return list(self.chapters.keys())
+
+    def ensure_unique_id(self, base: str = "chapter") -> str:
+        i = 1
+        cid = f"{base}"
+        ids = set(self.chapters.keys())
+        if cid not in ids:
+            return cid
+        while True:
+            cid = f"{base}{i}"
+            if cid not in ids:
+                return cid
+            i += 1
+
+    def serialize(self) -> str:
+        lines = []
+        # metadata
+        lines.append(f"@title: {self.title}".rstrip())
+        if self.start_id:
+            lines.append(f"@start: {self.start_id}")
+        lines.append("")  # blank line
+
+        # chapters in insertion order
+        for cid, ch in self.chapters.items():
+            header = f"# {ch.chapter_id}: {ch.title}" if ch.title else f"# {ch.chapter_id}"
+            lines.append(header)
+            # paragraphs
+            for p in ch.paragraphs:
+                lines.append(p.rstrip())
+                lines.append("")  # blank line between paragraphs
+            # remove trailing blank if any paragraph exists
+            if len(ch.paragraphs) > 0 and len(lines) > 0 and lines[-1] == "":
+                pass
+            # choices
+            for c in ch.choices:
+                lines.append(f"* {c.text} -> {c.target_id}")
+            lines.append("")  # blank line after chapter
+        # trim trailing blanks
+        while lines and lines[-1] == "":
+            lines.pop()
+        return "\n".join(lines)
+
+# ---------- 파서 (열기용) ----------
+
+class ParseError(Exception):
+    pass
+
+class StoryParser:
+    def parse(self, text: str) -> Story:
+        lines = text.splitlines()
+        story = Story()
+        current: Optional[Chapter] = None
+        buffer: List[str] = []
+
+        # metadata first pass
+        for raw in lines:
+            s = raw.strip()
+            if s.startswith("@title:"):
+                story.title = s[len("@title:"):].strip() or "Untitled"
+            elif s.startswith("@start:"):
+                story.start_id = s[len("@start:"):].strip() or None
+
+        i = 0
+        while i < len(lines):
+            raw = lines[i]
+            line = raw.rstrip("\n")
+            s = line.strip()
+            i += 1
+
+            if s.startswith("#"):
+                if current is not None and buffer:
+                    current.paragraphs.extend(self._flush_paragraphs(buffer))
+                    buffer.clear()
+                current = self._parse_header(s)
+                if current.chapter_id in story.chapters:
+                    raise ParseError(f"Duplicate chapter id: {current.chapter_id}")
+                story.chapters[current.chapter_id] = current
+                continue
+
+            if s == "":
+                if current is not None and buffer:
+                    current.paragraphs.extend(self._flush_paragraphs(buffer))
+                    buffer.clear()
+                continue
+
+            if s.startswith("* "):
+                if current is None:
+                    raise ParseError("Choice outside of a chapter.")
+                ch = self._parse_choice(s)
+                current.choices.append(ch)
+                continue
+
+            if current is None:
+                raise ParseError("Narrative outside of a chapter.")
+            buffer.append(line)
+
+        if current is not None and buffer:
+            current.paragraphs.extend(self._flush_paragraphs(buffer))
+            buffer.clear()
+
+        if story.start_id is None:
+            # auto-pick first chapter if any
+            if story.chapters:
+                story.start_id = next(iter(story.chapters.keys()))
+            else:
+                raise ParseError("No chapters.")
+        return story
+
+    def _flush_paragraphs(self, buf: List[str]) -> List[str]:
+        if not buf:
+            return []
+        paragraphs = []
+        cur = []
+        for ln in buf:
+            if ln.strip() == "":
+                if cur:
+                    paragraphs.append("\n".join(cur).strip())
+                    cur = []
+            else:
+                cur.append(ln)
+        if cur:
+            paragraphs.append("\n".join(cur).strip())
+        return paragraphs
+
+    def _parse_header(self, s: str) -> Chapter:
+        content = s.lstrip("#").strip()
+        if ":" in content:
+            cid, title = content.split(":", 1)
+            return Chapter(chapter_id=cid.strip(), title=title.strip())
+        return Chapter(chapter_id=content.strip(), title=content.strip())
+
+    def _parse_choice(self, s: str) -> Choice:
+        body = s[2:].strip()
+        if "->" not in body:
+            raise ParseError("Choice must contain '->'.")
+        left, right = body.split("->", 1)
+        text = left.strip()
+        target = right.strip()
+        if not text or not target:
+            raise ParseError("Empty choice text or target.")
+        return Choice(text=text, target_id=target)
+
+# ---------- 에디터 GUI ----------
+
+class ChoiceEditor(tk.Toplevel):
+    def __init__(self, master, title: str, choice: Optional[Choice], chapter_ids: List[str]):
+        super().__init__(master)
+        self.title(title)
+        self.resizable(False, False)
+        self.choice: Optional[Choice] = None
+        self.result_ok = False
+
+        frm = ttk.Frame(self, padding=10)
+        frm.grid(row=0, column=0, sticky="nsew")
+
+        ttk.Label(frm, text="버튼 문구").grid(row=0, column=0, sticky="w")
+        self.ent_text = ttk.Entry(frm, width=50)
+        self.ent_text.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0,8))
+
+        ttk.Label(frm, text="이동 타깃 챕터 ID").grid(row=2, column=0, sticky="w")
+        self.cmb_target = ttk.Combobox(frm, values=chapter_ids, state="readonly", width=30)
+        self.cmb_target.grid(row=3, column=0, sticky="w")
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=4, column=0, sticky="e", pady=(10,0))
+        ok = ttk.Button(btns, text="확인", command=self._ok)
+        cancel = ttk.Button(btns, text="취소", command=self._cancel)
+        ok.grid(row=0, column=0, padx=5)
+        cancel.grid(row=0, column=1)
+
+        if choice:
+            self.ent_text.insert(0, choice.text)
+            # target이 목록에 없을 수도 있어 수동 입력 허용 대신 readonly 요구사항 때문에 목록에 없다면 그대로 표시 불가
+            # 따라서 목록에 없다면 일단 values에 추가하여 선택 가능하게 함
+            vals = list(self.cmb_target["values"])
+            if choice.target_id not in vals:
+                vals.append(choice.target_id)
+                self.cmb_target["values"] = vals
+            self.cmb_target.set(choice.target_id)
+        else:
+            if chapter_ids:
+                self.cmb_target.current(0)
+
+        self.bind("<Return>", lambda e: self._ok())
+        self.bind("<Escape>", lambda e: self._cancel())
+        self.grab_set()
+        self.ent_text.focus_set()
+        self.wait_window(self)
+
+    def _ok(self):
+        text = self.ent_text.get().strip()
+        target = self.cmb_target.get().strip()
+        if not text:
+            messagebox.showerror("오류", "버튼 문구를 입력하세요.")
+            return
+        if not target:
+            messagebox.showerror("오류", "이동 타깃 챕터 ID를 선택하세요.")
+            return
+        self.choice = Choice(text=text, target_id=target)
+        self.result_ok = True
+        self.destroy()
+
+    def _cancel(self):
+        self.result_ok = False
+        self.destroy()
+
+class ChapterEditor(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Branching Novel Editor")
+        self.geometry("1200x800")
+        self.minsize(1000, 700)
+
+        self.story = Story()
+        # 초기 챕터 하나 생성
+        init_id = self.story.ensure_unique_id("intro")
+        self.story.chapters[init_id] = Chapter(chapter_id=init_id, title="Introduction", paragraphs=[], choices=[])
+        self.story.start_id = init_id
+
+        self.current_chapter_id: Optional[str] = init_id
+        self.current_file: Optional[str] = None
+        self.dirty: bool = False
+
+        self._build_menu()
+        self._build_ui()
+        self._refresh_chapter_list()
+        self._load_chapter_to_form(init_id)
+        self._refresh_meta_panel()
+        self._update_preview()
+
+    # ---------- UI 구성 ----------
+    def _build_menu(self):
+        m = tk.Menu(self)
+        fm = tk.Menu(m, tearoff=0)
+        fm.add_command(label="새로 만들기", command=self._new_story, accelerator="Ctrl+N")
+        fm.add_command(label="열기...", command=self._open_file, accelerator="Ctrl+O")
+        fm.add_separator()
+        fm.add_command(label="저장", command=self._save_file, accelerator="Ctrl+S")
+        fm.add_command(label="다른 이름으로 저장...", command=self._save_file_as)
+        fm.add_separator()
+        fm.add_command(label="종료", command=self._exit_app)
+        m.add_cascade(label="파일", menu=fm)
+
+        em = tk.Menu(m, tearoff=0)
+        em.add_command(label="챕터 추가", command=self._add_chapter, accelerator="Ctrl+Shift+A")
+        em.add_command(label="챕터 삭제", command=self._delete_current_chapter, accelerator="Del")
+        m.add_cascade(label="편집", menu=em)
+
+        self.config(menu=m)
+
+        self.bind_all("<Control-n>", lambda e: self._new_story())
+        self.bind_all("<Control-o>", lambda e: self._open_file())
+        self.bind_all("<Control-s>", lambda e: self._save_file())
+        self.bind_all("<Delete>", lambda e: self._delete_current_chapter())
+        self.bind_all("<Control-Shift-A>", lambda e: self._add_chapter())
+
+    def _build_ui(self):
+        # 좌: 메타 + 챕터 리스트, 우: 챕터 편집 + 선택지 + 미리보기
+        root = ttk.Frame(self, padding=8)
+        root.pack(fill="both", expand=True)
+
+        root.columnconfigure(0, weight=0)
+        root.columnconfigure(1, weight=1)
+        root.rowconfigure(0, weight=1)
+
+        left = ttk.Frame(root)
+        left.grid(row=0, column=0, sticky="nsw", padx=(0,8))
+        left.rowconfigure(2, weight=1)
+
+        # 작품 메타
+        meta = ttk.LabelFrame(left, text="작품 정보", padding=8)
+        meta.grid(row=0, column=0, sticky="ew")
+        meta.columnconfigure(1, weight=1)
+
+        ttk.Label(meta, text="제목(@title)").grid(row=0, column=0, sticky="w")
+        self.ent_title = ttk.Entry(meta, width=30)
+        self.ent_title.grid(row=0, column=1, sticky="ew", pady=(0,6))
+        self.ent_title.insert(0, self.story.title)
+        self.ent_title.bind("<KeyRelease>", lambda e: self._on_title_changed())
+
+        ttk.Label(meta, text="시작 챕터(@start)").grid(row=1, column=0, sticky="w")
+        self.cmb_start = ttk.Combobox(meta, values=[], state="readonly")
+        self.cmb_start.grid(row=1, column=1, sticky="ew")
+        self.cmb_start.bind("<<ComboboxSelected>>", lambda e: self._on_start_changed())
+
+        # 챕터 목록
+        chap_frame = ttk.LabelFrame(left, text="챕터 목록", padding=8)
+        chap_frame.grid(row=2, column=0, sticky="nsew", pady=(8,0))
+        chap_frame.rowconfigure(1, weight=1)
+        chap_frame.columnconfigure(0, weight=1)
+
+        self.lst_chapters = tk.Listbox(chap_frame, height=20, exportselection=False)
+        self.lst_chapters.grid(row=1, column=0, sticky="nsew")
+        self.lst_chapters.bind("<<ListboxSelect>>", lambda e: self._on_select_chapter())
+        self.lst_chapters.bind("<Double-Button-1>", lambda e: self._on_select_chapter())
+
+        btns = ttk.Frame(chap_frame)
+        btns.grid(row=0, column=0, sticky="ew", pady=(0,6))
+        ttk.Button(btns, text="추가", command=self._add_chapter).pack(side="left")
+        ttk.Button(btns, text="삭제", command=self._delete_current_chapter).pack(side="left", padx=(6,0))
+        ttk.Button(btns, text="위로", command=lambda: self._reorder_chapter(-1)).pack(side="left", padx=(6,0))
+        ttk.Button(btns, text="아래로", command=lambda: self._reorder_chapter(1)).pack(side="left", padx=(6,0))
+
+        # 우측 편집/미리보기 영역
+        right = ttk.Notebook(root)
+        right.grid(row=0, column=1, sticky="nsew")
+
+        # 챕터 편집 탭
+        edit_tab = ttk.Frame(right, padding=8)
+        right.add(edit_tab, text="챕터 편집")
+
+        edit_tab.columnconfigure(1, weight=1)
+        edit_tab.rowconfigure(3, weight=1)
+
+        ttk.Label(edit_tab, text="챕터 ID").grid(row=0, column=0, sticky="w")
+        self.ent_ch_id = ttk.Entry(edit_tab)
+        self.ent_ch_id.grid(row=0, column=1, sticky="ew", pady=(0,6))
+        self.ent_ch_id.bind("<FocusOut>", lambda e: self._apply_chapter_id_title())
+        self.ent_ch_id.bind("<Return>", lambda e: self._apply_chapter_id_title())
+
+        ttk.Label(edit_tab, text="챕터 제목").grid(row=1, column=0, sticky="w")
+        self.ent_ch_title = ttk.Entry(edit_tab)
+        self.ent_ch_title.grid(row=1, column=1, sticky="ew", pady=(0,6))
+        self.ent_ch_title.bind("<FocusOut>", lambda e: self._apply_chapter_id_title())
+        self.ent_ch_title.bind("<Return>", lambda e: self._apply_chapter_id_title())
+
+        # 본문
+        body_frame = ttk.LabelFrame(edit_tab, text="본문(빈 줄로 문단 구분)", padding=6)
+        body_frame.grid(row=3, column=0, columnspan=2, sticky="nsew")
+        body_frame.rowconfigure(0, weight=1)
+        body_frame.columnconfigure(0, weight=1)
+
+        self.txt_body = tk.Text(body_frame, wrap="word", undo=True, height=20,
+                                font=("Malgun Gothic", 12) if sys.platform.startswith("win") else ("Noto Sans CJK KR", 12))
+        self.txt_body.grid(row=0, column=0, sticky="nsew")
+        scr = ttk.Scrollbar(body_frame, orient="vertical", command=self.txt_body.yview)
+        scr.grid(row=0, column=1, sticky="ns")
+        self.txt_body.configure(yscrollcommand=scr.set)
+        self.txt_body.bind("<<Modified>>", self._on_body_modified)
+
+        # 선택지 편집
+        choices_frame = ttk.LabelFrame(edit_tab, text="선택지(버튼)", padding=6)
+        choices_frame.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8,0))
+        choices_frame.columnconfigure(0, weight=1)
+
+        self.tree_choices = ttk.Treeview(choices_frame, columns=("text", "target"), show="headings", height=6)
+        self.tree_choices.heading("text", text="버튼 문구")
+        self.tree_choices.heading("target", text="타깃 챕터 ID")
+        self.tree_choices.column("text", width=400, anchor="w")
+        self.tree_choices.column("target", width=160, anchor="w")
+        self.tree_choices.grid(row=0, column=0, sticky="ew")
+
+        ch_btns = ttk.Frame(choices_frame)
+        ch_btns.grid(row=0, column=1, sticky="ns")
+        ttk.Button(ch_btns, text="추가", command=self._add_choice).grid(row=0, column=0, pady=(0,4))
+        ttk.Button(ch_btns, text="편집", command=self._edit_choice).grid(row=1, column=0, pady=4)
+        ttk.Button(ch_btns, text="삭제", command=self._delete_choice).grid(row=2, column=0, pady=4)
+        ttk.Button(ch_btns, text="위로", command=lambda: self._reorder_choice(-1)).grid(row=3, column=0, pady=4)
+        ttk.Button(ch_btns, text="아래로", command=lambda: self._reorder_choice(1)).grid(row=4, column=0, pady=4)
+
+        # 미리보기 탭
+        preview_tab = ttk.Frame(right, padding=8)
+        right.add(preview_tab, text="생성 미리보기(.txt)")
+        preview_tab.rowconfigure(0, weight=1)
+        preview_tab.columnconfigure(0, weight=1)
+
+        self.txt_preview = tk.Text(preview_tab, wrap="none", state="disabled",
+                                   font=("Consolas", 11) if sys.platform.startswith("win") else ("Menlo", 11))
+        self.txt_preview.grid(row=0, column=0, sticky="nsew")
+        pvx = ttk.Scrollbar(preview_tab, orient="horizontal", command=self.txt_preview.xview)
+        pvy = ttk.Scrollbar(preview_tab, orient="vertical", command=self.txt_preview.yview)
+        pvx.grid(row=1, column=0, sticky="ew")
+        pvy.grid(row=0, column=1, sticky="ns")
+        self.txt_preview.configure(xscrollcommand=pvx.set, yscrollcommand=pvy.set)
+
+        # 하단 버튼 바
+        bottom = ttk.Frame(self)
+        bottom.pack(fill="x", padx=8, pady=(0,8))
+        ttk.Button(bottom, text="유효성 검사", command=self._validate_story).pack(side="left")
+        ttk.Button(bottom, text="저장", command=self._save_file).pack(side="right")
+        ttk.Button(bottom, text="미리보기 갱신", command=self._update_preview).pack(side="right", padx=(0,6))
+
+    # ---------- 핸들러 ----------
+    def _on_title_changed(self):
+        self.story.title = self.ent_title.get().strip() or "Untitled"
+        self._set_dirty(True)
+        self._update_preview()
+
+    def _on_start_changed(self):
+        sid = self.cmb_start.get().strip()
+        if sid:
+            self.story.start_id = sid
+            self._set_dirty(True)
+            self._update_preview()
+
+    def _on_select_chapter(self):
+        sel = self.lst_chapters.curselection()
+        if not sel:
+            return
+        idx = sel[0]
+        cid = list(self.story.chapters.keys())[idx]
+        if self.current_chapter_id != cid:
+            self._apply_body_to_model()  # 기존 챕터 본문 반영
+            self._load_chapter_to_form(cid)
+
+    def _on_body_modified(self, evt):
+        # Text의 Modified 플래그를 수동 리셋
+        if self.txt_body.edit_modified():
+            self.txt_body.edit_modified(False)
+            self._set_dirty(True)
+            self._apply_body_to_model()
+            self._update_preview()
+
+    # ---------- 상호작용 ----------
+    def _load_chapter_to_form(self, cid: str):
+        self.current_chapter_id = cid
+        ch = self.story.chapters[cid]
+        self.ent_ch_id.delete(0, tk.END)
+        self.ent_ch_id.insert(0, ch.chapter_id)
+        self.ent_ch_title.delete(0, tk.END)
+        self.ent_ch_title.insert(0, ch.title)
+
+        self.txt_body.config(state="normal")
+        self.txt_body.delete("1.0", tk.END)
+        # 문단을 빈 줄로 결합하여 편집
+        if ch.paragraphs:
+            joined = "\n\n".join(ch.paragraphs)
+            self.txt_body.insert(tk.END, joined)
+        self.txt_body.edit_modified(False)
+
+        for i in self.tree_choices.get_children():
+            self.tree_choices.delete(i)
+        for c in ch.choices:
+            self.tree_choices.insert("", tk.END, values=(c.text, c.target_id))
+
+        self._refresh_meta_panel()
+        self._update_preview()
+
+    def _apply_body_to_model(self):
+        if self.current_chapter_id is None:
+            return
+        ch = self.story.chapters[self.current_chapter_id]
+        raw = self.txt_body.get("1.0", tk.END).rstrip("\n")
+        paras = [p.strip() for p in raw.split("\n\n")]
+        paras = [p for p in paras if p != ""]
+        ch.paragraphs = paras
+
+    def _apply_chapter_id_title(self):
+        if self.current_chapter_id is None:
+            return
+        new_id = self.ent_ch_id.get().strip()
+        new_title = self.ent_ch_title.get().strip()
+        if not new_id:
+            messagebox.showerror("오류", "챕터 ID는 비울 수 없습니다.")
+            self.ent_ch_id.focus_set()
+            return
+
+        # ID 변경 처리
+        cur_id = self.current_chapter_id
+        if new_id != cur_id:
+            if new_id in self.story.chapters:
+                messagebox.showerror("오류", f"이미 존재하는 챕터 ID입니다: {new_id}")
+                self.ent_ch_id.delete(0, tk.END)
+                self.ent_ch_id.insert(0, cur_id)
+                return
+            # 키 교체
+            ch_obj = self.story.chapters.pop(cur_id)
+            ch_obj.chapter_id = new_id
+            self.story.chapters[new_id] = ch_obj
+            self.current_chapter_id = new_id
+            # 선택지 타깃에서 참조하던 ID는 수정하지 않음. 필요 시 수동 정리.
+            if self.story.start_id == cur_id:
+                self.story.start_id = new_id
+            self._refresh_chapter_list()
+
+        # 제목 반영
+        self.story.chapters[new_id].title = new_title
+        self._set_dirty(True)
+        self._refresh_meta_panel()
+        self._update_preview()
+
+    def _refresh_chapter_list(self):
+        self.lst_chapters.delete(0, tk.END)
+        for cid, ch in self.story.chapters.items():
+            self.lst_chapters.insert(tk.END, f"{cid}  |  {ch.title}")
+        # 현재 선택 유지
+        if self.current_chapter_id and self.current_chapter_id in self.story.chapters:
+            idx = list(self.story.chapters.keys()).index(self.current_chapter_id)
+            self.lst_chapters.selection_clear(0, tk.END)
+            self.lst_chapters.selection_set(idx)
+            self.lst_chapters.see(idx)
+        self._refresh_meta_panel()
+
+    def _refresh_meta_panel(self):
+        ids = list(self.story.chapters.keys())
+        self.cmb_start["values"] = ids
+        if self.story.start_id in ids:
+            self.cmb_start.set(self.story.start_id)
+        elif ids:
+            self.cmb_start.set(ids[0])
+            self.story.start_id = ids[0]
+
+    def _add_chapter(self):
+        # 현재 변경사항 반영
+        self._apply_body_to_model()
+        base = "chapter"
+        new_id = self.story.ensure_unique_id(base)
+        self.story.chapters[new_id] = Chapter(chapter_id=new_id, title="New Chapter", paragraphs=[], choices=[])
+        self.current_chapter_id = new_id
+        self._refresh_chapter_list()
+        self._load_chapter_to_form(new_id)
+        self._set_dirty(True)
+
+    def _delete_current_chapter(self):
+        if self.current_chapter_id is None:
+            return
+        if len(self.story.chapters) <= 1:
+            messagebox.showwarning("경고", "최소 한 개의 챕터는 필요합니다.")
+            return
+        cid = self.current_chapter_id
+        if messagebox.askyesno("삭제 확인", f"챕터 '{cid}'를 삭제하시겠습니까?"):
+            # 시작 챕터였을 경우 다른 챕터로 옮김
+            keys = list(self.story.chapters.keys())
+            next_id = None
+            if len(keys) > 1:
+                for k in keys:
+                    if k != cid:
+                        next_id = k
+                        break
+            self.story.chapters.pop(cid)
+            # 참조 정리는 하지 않음. 유효성 검사 시 경고됨.
+            if self.story.start_id == cid:
+                self.story.start_id = next_id
+            self.current_chapter_id = next_id
+            self._refresh_chapter_list()
+            if next_id:
+                self._load_chapter_to_form(next_id)
+            self._set_dirty(True)
+
+    def _reorder_chapter(self, delta: int):
+        if self.current_chapter_id is None:
+            return
+        keys = list(self.story.chapters.keys())
+        idx = keys.index(self.current_chapter_id)
+        new_idx = idx + delta
+        if new_idx < 0 or new_idx >= len(keys):
+            return
+        # dict 재구성으로 순서 변경
+        reordered = {}
+        keys[idx], keys[new_idx] = keys[new_idx], keys[idx]
+        for k in keys:
+            reordered[k] = self.story.chapters[k]
+        self.story.chapters = reordered
+        self._refresh_chapter_list()
+        self._set_dirty(True)
+
+    def _add_choice(self):
+        if self.current_chapter_id is None:
+            return
+        ids = list(self.story.chapters.keys())
+        dlg = ChoiceEditor(self, "선택지 추가", None, ids)
+        if dlg.result_ok and dlg.choice:
+            ch = self.story.chapters[self.current_chapter_id]
+            ch.choices.append(dlg.choice)
+            self.tree_choices.insert("", tk.END, values=(dlg.choice.text, dlg.choice.target_id))
+            self._set_dirty(True)
+            self._update_preview()
+
+    def _edit_choice(self):
+        sel = self.tree_choices.selection()
+        if not sel:
+            return
+        idx = self.tree_choices.index(sel[0])
+        ch = self.story.chapters[self.current_chapter_id]
+        cur = ch.choices[idx]
+        ids = list(self.story.chapters.keys())
+        dlg = ChoiceEditor(self, "선택지 편집", cur, ids)
+        if dlg.result_ok and dlg.choice:
+            ch.choices[idx] = dlg.choice
+            self.tree_choices.item(sel[0], values=(dlg.choice.text, dlg.choice.target_id))
+            self._set_dirty(True)
+            self._update_preview()
+
+    def _delete_choice(self):
+        sel = self.tree_choices.selection()
+        if not sel:
+            return
+        idx = self.tree_choices.index(sel[0])
+        ch = self.story.chapters[self.current_chapter_id]
+        ch.choices.pop(idx)
+        self.tree_choices.delete(sel[0])
+        self._set_dirty(True)
+        self._update_preview()
+
+    def _reorder_choice(self, delta: int):
+        sel = self.tree_choices.selection()
+        if not sel:
+            return
+        cur_idx = self.tree_choices.index(sel[0])
+        new_idx = cur_idx + delta
+        ch = self.story.chapters[self.current_chapter_id]
+        if new_idx < 0 or new_idx >= len(ch.choices):
+            return
+        ch.choices[cur_idx], ch.choices[new_idx] = ch.choices[new_idx], ch.choices[cur_idx]
+        # 트리뷰 갱신
+        for i in self.tree_choices.get_children():
+            self.tree_choices.delete(i)
+        for c in ch.choices:
+            self.tree_choices.insert("", tk.END, values=(c.text, c.target_id))
+        # 선택 재설정
+        self.tree_choices.selection_set(self.tree_choices.get_children()[new_idx])
+        self._set_dirty(True)
+        self._update_preview()
+
+    def _update_preview(self):
+        self._apply_body_to_model()
+        txt = self.story.serialize()
+        self.txt_preview.config(state="normal")
+        self.txt_preview.delete("1.0", tk.END)
+        self.txt_preview.insert(tk.END, txt)
+        self.txt_preview.config(state="disabled")
+
+    def _validate_story(self):
+        errors = []
+        warnings = []
+
+        if not self.story.title.strip():
+            errors.append("작품 제목이 비어 있습니다.")
+        if not self.story.start_id or self.story.start_id not in self.story.chapters:
+            errors.append("시작 챕터(@start)가 유효하지 않습니다.")
+
+        ids = set(self.story.chapters.keys())
+        for cid, ch in self.story.chapters.items():
+            if not ch.chapter_id.strip():
+                errors.append(f"챕터 ID가 비어 있습니다: 내부키={cid}")
+            if ch.chapter_id != cid:
+                errors.append(f"내부키와 챕터 ID가 불일치합니다: {cid} != {ch.chapter_id}")
+            # 선택지 타깃 유효성
+            for c in ch.choices:
+                if c.target_id not in ids:
+                    warnings.append(f"[{cid}] 선택지 타깃 미존재: '{c.text}' -> {c.target_id}")
+
+        msg = []
+        if errors:
+            msg.append("오류:")
+            msg.extend(f"- {e}" for e in errors)
+        if warnings:
+            if msg:
+                msg.append("")
+            msg.append("경고:")
+            msg.extend(f"- {w}" for w in warnings)
+
+        if not msg:
+            messagebox.showinfo("유효성 검사", "문제 없음.")
+        else:
+            messagebox.showwarning("유효성 검사 결과", "\n".join(msg))
+
+    # ---------- 파일 입출력 ----------
+    def _new_story(self):
+        if not self._confirm_discard_changes():
+            return
+        self.story = Story()
+        intro_id = self.story.ensure_unique_id("intro")
+        self.story.chapters[intro_id] = Chapter(chapter_id=intro_id, title="Introduction", paragraphs=[], choices=[])
+        self.story.start_id = intro_id
+        self.current_chapter_id = intro_id
+        self.current_file = None
+        self.ent_title.delete(0, tk.END)
+        self.ent_title.insert(0, self.story.title)
+        self._refresh_chapter_list()
+        self._load_chapter_to_form(intro_id)
+        self._refresh_meta_panel()
+        self._update_preview()
+        self._set_dirty(False)
+
+    def _open_file(self):
+        if not self._confirm_discard_changes():
+            return
+        path = filedialog.askopenfilename(title="열기", filetypes=[("Text Files","*.txt"),("All Files","*.*")])
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                text = f.read()
+            parser = StoryParser()
+            story = parser.parse(text)
+        except ParseError as e:
+            messagebox.showerror("파싱 오류", str(e))
+            return
+        except Exception as e:
+            messagebox.showerror("오류", f"파일을 열 수 없습니다:\n{e}")
+            return
+
+        self.story = story
+        # dict 유지: 파서는 본문 순서대로 chapters 삽입하므로 그 순서 유지
+        self.current_chapter_id = story.start_id
+        self.current_file = path
+
+        self.ent_title.delete(0, tk.END)
+        self.ent_title.insert(0, self.story.title)
+        self._refresh_chapter_list()
+        if self.current_chapter_id is None:
+            self.current_chapter_id = next(iter(self.story.chapters.keys()))
+        self._load_chapter_to_form(self.current_chapter_id)
+        self._refresh_meta_panel()
+        self._update_preview()
+        self._set_dirty(False)
+        self.title(f"Branching Novel Editor - {os.path.basename(path)}")
+
+    def _save_file(self):
+        if self.current_file is None:
+            return self._save_file_as()
+        self._apply_body_to_model()
+        txt = self.story.serialize()
+        try:
+            with open(self.current_file, "w", encoding="utf-8") as f:
+                f.write(txt + "\n")
+        except Exception as e:
+            messagebox.showerror("오류", f"저장 실패:\n{e}")
+            return
+        self._set_dirty(False)
+        messagebox.showinfo("저장", "저장 완료.")
+
+    def _save_file_as(self):
+        self._apply_body_to_model()
+        path = filedialog.asksaveasfilename(
+            title="다른 이름으로 저장",
+            defaultextension=".txt",
+            filetypes=[("Text Files","*.txt"),("All Files","*.*")],
+            initialfile="story.txt"
+        )
+        if not path:
+            return
+        txt = self.story.serialize()
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(txt + "\n")
+        except Exception as e:
+            messagebox.showerror("오류", f"저장 실패:\n{e}")
+            return
+        self.current_file = path
+        self._set_dirty(False)
+        self.title(f"Branching Novel Editor - {os.path.basename(path)}")
+        messagebox.showinfo("저장", "저장 완료.")
+
+    def _exit_app(self):
+        if not self._confirm_discard_changes():
+            return
+        self.destroy()
+
+    def _confirm_discard_changes(self) -> bool:
+        if not self.dirty:
+            return True
+        res = messagebox.askyesnocancel("변경 내용", "저장하지 않은 변경사항이 있습니다. 저장하시겠습니까?")
+        if res is None:
+            return False
+        if res is True:
+            self._save_file()
+            return not self.dirty
+        return True
+
+    def _set_dirty(self, val: bool):
+        self.dirty = val
+        mark = "*" if self.dirty else ""
+        base = "Branching Novel Editor"
+        tail = f" - {os.path.basename(self.current_file)}" if self.current_file else ""
+        self.title(f"{base}{tail}{mark}")
+
+# ---------- 진입점 ----------
+
+def main():
+    app = ChapterEditor()
+    app.mainloop()
+
+if __name__ == "__main__":
+    main()
