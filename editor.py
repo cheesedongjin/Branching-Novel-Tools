@@ -39,7 +39,7 @@ import re
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Union
 
 # ---------- 데이터 모델 ----------
 
@@ -50,11 +50,18 @@ class Choice:
     condition: Optional[str] = None
 
 @dataclass
+class Action:
+    op: str  # 'set' or 'add'
+    var: str
+    value: Union[int, bool]
+
+@dataclass
 class Chapter:
     chapter_id: str
     title: str
     paragraphs: List[str] = field(default_factory=list)
     choices: List[Choice] = field(default_factory=list)
+    actions: List[Action] = field(default_factory=list)
 
 @dataclass
 class Story:
@@ -98,6 +105,12 @@ class Story:
             # remove trailing blank if any paragraph exists
             if len(ch.paragraphs) > 0 and len(lines) > 0 and lines[-1] == "":
                 pass
+            # actions
+            for act in ch.actions:
+                if act.op == "set":
+                    lines.append(f"! set {act.var} = {act.value}")
+                elif act.op == "add":
+                    lines.append(f"! add {act.var} += {act.value}")
             # choices
             for c in ch.choices:
                 if c.condition:
@@ -153,6 +166,13 @@ class StoryParser:
                 if current is not None and buffer:
                     current.paragraphs.extend(self._flush_paragraphs(buffer))
                     buffer.clear()
+                continue
+
+            if s.startswith("!"):
+                if current is None:
+                    raise ParseError("Action outside of a chapter.")
+                act = self._parse_action(s)
+                current.actions.append(act)
                 continue
 
             if s.startswith("* "):
@@ -220,6 +240,33 @@ class StoryParser:
         if not text or not target:
             raise ParseError("Empty choice text or target.")
         return Choice(text=text, target_id=target, condition=condition)
+
+    def _parse_action(self, s: str) -> Action:
+        content = s[1:].strip()
+        if content.startswith("set "):
+            rest = content[4:].strip()
+            if "=" not in rest:
+                raise ParseError("Invalid set syntax.")
+            var, val = rest.split("=", 1)
+            return Action(op="set", var=var.strip(), value=self._parse_value(val.strip()))
+        if content.startswith("add "):
+            rest = content[4:].strip()
+            if "+=" not in rest:
+                raise ParseError("Invalid add syntax.")
+            var, val = rest.split("+=", 1)
+            return Action(op="add", var=var.strip(), value=self._parse_value(val.strip()))
+        raise ParseError("Unknown action command.")
+
+    def _parse_value(self, token: str) -> Union[int, bool]:
+        t = token.lower()
+        if t == "true":
+            return True
+        if t == "false":
+            return False
+        try:
+            return int(token)
+        except ValueError:
+            raise ParseError(f"Invalid value: {token}")
 
 # ---------- 에디터 GUI ----------
 
@@ -852,6 +899,37 @@ class ChapterEditor(tk.Tk):
         """현재 스토리를 간단히 실행해 볼 수 있는 팝업을 띄운다."""
         self._apply_body_to_model()
 
+        state: Dict[str, Union[int, bool]] = {}
+        current: Optional[Chapter] = None
+
+        def apply_actions(ch: Chapter):
+            for act in ch.actions:
+                if act.op == "set":
+                    state[act.var] = act.value
+                elif act.op == "add":
+                    cur = state.get(act.var, 0)
+                    if isinstance(cur, bool):
+                        cur = int(cur)
+                    val = act.value
+                    if isinstance(val, bool):
+                        val = int(val)
+                    state[act.var] = cur + val
+
+        def eval_cond(cond: str) -> bool:
+            expr = re.sub(r"\btrue\b", "True", cond, flags=re.IGNORECASE)
+            expr = re.sub(r"\bfalse\b", "False", expr, flags=re.IGNORECASE)
+
+            class Env(dict):
+                def __missing__(self, key):
+                    return 0
+
+            env = Env()
+            env.update(state)
+            try:
+                return bool(eval(expr, {"__builtins__": None}, env))
+            except Exception:
+                return False
+
         win = tk.Toplevel(self)
         win.title("Runtime Preview")
         win.geometry("600x400")
@@ -863,11 +941,13 @@ class ChapterEditor(tk.Tk):
         btn_frame.pack(fill="x", padx=8, pady=(0,8))
 
         def show(cid: str):
+            nonlocal current
             ch = self.story.chapters.get(cid)
             if not ch:
                 messagebox.showerror("오류", f"챕터를 찾을 수 없습니다: {cid}", parent=win)
                 win.destroy()
                 return
+            current = ch
             text.config(state="normal")
             text.delete("1.0", tk.END)
             for p in ch.paragraphs:
@@ -876,11 +956,25 @@ class ChapterEditor(tk.Tk):
 
             for child in btn_frame.winfo_children():
                 child.destroy()
-            if ch.choices:
-                for c in ch.choices:
-                    ttk.Button(btn_frame, text=c.text, command=lambda t=c.target_id: show(t)).pack(fill="x", pady=2)
+
+            display = []
+            for c in ch.choices:
+                ok = True
+                if c.condition:
+                    ok = eval_cond(c.condition)
+                if ok:
+                    display.append(c)
+
+            if display:
+                for c in display:
+                    ttk.Button(btn_frame, text=c.text, command=lambda c=c: choose(c)).pack(fill="x", pady=2)
             else:
                 ttk.Button(btn_frame, text="닫기", command=win.destroy).pack(pady=2)
+
+        def choose(choice: Choice):
+            if current:
+                apply_actions(current)
+            show(choice.target_id)
 
         start = self.story.start_id or next(iter(self.story.chapters.keys()), None)
         if not start:
