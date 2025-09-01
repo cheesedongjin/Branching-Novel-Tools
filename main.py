@@ -111,6 +111,7 @@ class Chapter:
 class Story:
     title: str = "Untitled"
     start_id: Optional[str] = None
+    ending_text: str = "The End"
     chapters: Dict[str, Chapter] = field(default_factory=dict)
 
     def get_chapter(self, cid: str) -> Optional[Chapter]:
@@ -145,6 +146,9 @@ class StoryParser:
                 continue
             if line.startswith("@start:"):
                 story.start_id = line[len("@start:"):].strip() or None
+                continue
+            if line.startswith("@ending:"):
+                story.ending_text = line[len("@ending:"):].strip() or "The End"
                 continue
 
         # 실제 파싱 루프
@@ -526,9 +530,11 @@ class BranchingNovelApp(tk.Tk):
             elif self.show_disabled:
                 display.append((choice, True))
 
-        if not display:
-            lbl = ttk.Label(self.choice_frame, text="선택지가 없습니다. '다음' 또는 챕터 목록을 사용하세요.")
+        if not display or all(disabled for _, disabled in display):
+            lbl = ttk.Label(self.choice_frame, text=self.story.ending_text)
             lbl.grid(row=0, column=0, sticky="w")
+            exit_btn = ttk.Button(self.choice_frame, text="나가기", command=self.destroy)
+            exit_btn.grid(row=1, column=0, sticky="ew", pady=2)
             return
 
         # 버튼 생성

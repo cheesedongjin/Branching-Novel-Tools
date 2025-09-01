@@ -60,6 +60,7 @@ class Chapter:
 class Story:
     title: str = "Untitled"
     start_id: Optional[str] = None
+    ending_text: str = "The End"
     chapters: Dict[str, Chapter] = field(default_factory=dict)
 
     def chapter_ids(self) -> List[str]:
@@ -83,6 +84,7 @@ class Story:
         lines.append(f"@title: {self.title}".rstrip())
         if self.start_id:
             lines.append(f"@start: {self.start_id}")
+        lines.append(f"@ending: {self.ending_text}")
         lines.append("")  # blank line
 
         # chapters in insertion order
@@ -127,6 +129,8 @@ class StoryParser:
                 story.title = s[len("@title:"):].strip() or "Untitled"
             elif s.startswith("@start:"):
                 story.start_id = s[len("@start:"):].strip() or None
+            elif s.startswith("@ending:"):
+                story.ending_text = s[len("@ending:"):].strip() or "The End"
 
         i = 0
         while i < len(lines):
@@ -378,6 +382,12 @@ class ChapterEditor(tk.Tk):
         self.cmb_start.grid(row=1, column=1, sticky="ew")
         self.cmb_start.bind("<<ComboboxSelected>>", lambda e: self._on_start_changed())
 
+        ttk.Label(meta, text="엔딩 문구(@ending)").grid(row=2, column=0, sticky="w")
+        self.ent_end = ttk.Entry(meta, width=30)
+        self.ent_end.grid(row=2, column=1, sticky="ew")
+        self.ent_end.insert(0, self.story.ending_text)
+        self.ent_end.bind("<KeyRelease>", lambda e: self._on_ending_changed())
+
         # 챕터 목록
         chap_frame = ttk.LabelFrame(left, text="챕터 목록", padding=8)
         chap_frame.grid(row=2, column=0, sticky="nsew", pady=(8,0))
@@ -515,6 +525,11 @@ class ChapterEditor(tk.Tk):
             self._set_dirty(True)
             self._update_preview()
 
+    def _on_ending_changed(self):
+        self.story.ending_text = self.ent_end.get().strip() or "The End"
+        self._set_dirty(True)
+        self._update_preview()
+
     def _on_select_chapter(self):
         sel = self.lst_chapters.curselection()
         if not sel:
@@ -636,6 +651,8 @@ class ChapterEditor(tk.Tk):
         elif ids:
             self.cmb_start.set(ids[0])
             self.story.start_id = ids[0]
+        self.ent_end.delete(0, tk.END)
+        self.ent_end.insert(0, self.story.ending_text)
 
     def _add_chapter(self):
         # 현재 변경사항 반영
