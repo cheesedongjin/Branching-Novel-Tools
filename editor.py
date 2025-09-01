@@ -35,6 +35,7 @@ Branching Novel Editor (GUI)
 
 import os
 import sys
+import re
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from dataclasses import dataclass, field
@@ -46,6 +47,7 @@ from typing import List, Dict, Optional, Tuple
 class Choice:
     text: str
     target_id: str
+    condition: Optional[str] = None
 
 @dataclass
 class Chapter:
@@ -96,7 +98,10 @@ class Story:
                 pass
             # choices
             for c in ch.choices:
-                lines.append(f"* {c.text} -> {c.target_id}")
+                if c.condition:
+                    lines.append(f"* [{c.condition}] {c.text} -> {c.target_id}")
+                else:
+                    lines.append(f"* {c.text} -> {c.target_id}")
             lines.append("")  # blank line after chapter
         # trim trailing blanks
         while lines and lines[-1] == "":
@@ -197,11 +202,20 @@ class StoryParser:
         if "->" not in body:
             raise ParseError("Choice must contain '->'.")
         left, right = body.split("->", 1)
-        text = left.strip()
+        left = left.strip()
+        condition: Optional[str] = None
+        if left.startswith("["):
+            end = left.find("]")
+            if end == -1:
+                raise ParseError("Missing closing ']' in condition.")
+            condition = left[1:end].strip()
+            text = left[end + 1:].strip()
+        else:
+            text = left
         target = right.strip()
         if not text or not target:
             raise ParseError("Empty choice text or target.")
-        return Choice(text=text, target_id=target)
+        return Choice(text=text, target_id=target, condition=condition)
 
 # ---------- 에디터 GUI ----------
 
@@ -224,8 +238,12 @@ class ChoiceEditor(tk.Toplevel):
         self.cmb_target = ttk.Combobox(frm, values=chapter_ids, state="readonly", width=30)
         self.cmb_target.grid(row=3, column=0, sticky="w")
 
+        ttk.Label(frm, text="조건식 (빈칸=항상)").grid(row=4, column=0, sticky="w")
+        self.ent_cond = ttk.Entry(frm, width=50)
+        self.ent_cond.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0,8))
+
         btns = ttk.Frame(frm)
-        btns.grid(row=4, column=0, sticky="e", pady=(10,0))
+        btns.grid(row=6, column=0, sticky="e", pady=(10,0))
         ok = ttk.Button(btns, text="확인", command=self._ok)
         cancel = ttk.Button(btns, text="취소", command=self._cancel)
         ok.grid(row=0, column=0, padx=5)
@@ -240,6 +258,8 @@ class ChoiceEditor(tk.Toplevel):
                 vals.append(choice.target_id)
                 self.cmb_target["values"] = vals
             self.cmb_target.set(choice.target_id)
+            if choice.condition:
+                self.ent_cond.insert(0, choice.condition)
         else:
             if chapter_ids:
                 self.cmb_target.current(0)
@@ -253,13 +273,16 @@ class ChoiceEditor(tk.Toplevel):
     def _ok(self):
         text = self.ent_text.get().strip()
         target = self.cmb_target.get().strip()
+        cond = self.ent_cond.get().strip()
+        cond = re.sub(r"\btrue\b", "1", cond, flags=re.IGNORECASE)
+        cond = re.sub(r"\bfalse\b", "0", cond, flags=re.IGNORECASE)
         if not text:
             messagebox.showerror("오류", "버튼 문구를 입력하세요.")
             return
         if not target:
             messagebox.showerror("오류", "이동 타깃 챕터 ID를 선택하세요.")
             return
-        self.choice = Choice(text=text, target_id=target)
+        self.choice = Choice(text=text, target_id=target, condition=(cond or None))
         self.result_ok = True
         self.destroy()
 
