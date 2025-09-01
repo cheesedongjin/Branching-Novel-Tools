@@ -388,7 +388,7 @@ class ChapterEditor(tk.Tk):
         em.add_command(label="챕터 추가", command=self._add_chapter, accelerator="Ctrl+Shift+A")
         em.add_command(label="챕터 삭제", command=self._delete_current_chapter, accelerator="Del")
         em.add_separator()
-        em.add_command(label="찾기/변경", command=self._open_find_tab, accelerator="Ctrl+F")
+        em.add_command(label="찾기/변경", command=self._open_find_window, accelerator="Ctrl+F")
         m.add_cascade(label="편집", menu=em)
 
         self.config(menu=m)
@@ -398,7 +398,7 @@ class ChapterEditor(tk.Tk):
         self.bind_all("<Control-s>", lambda e: self._save_file())
         self.bind_all("<Delete>", lambda e: self._delete_current_chapter())
         self.bind_all("<Control-Shift-A>", lambda e: self._add_chapter())
-        self.bind_all("<Control-f>", lambda e: self._open_find_tab())
+        self.bind_all("<Control-f>", lambda e: self._open_find_window())
 
     def _build_ui(self):
         # 좌: 메타 + 챕터 리스트, 우: 챕터 편집 + 선택지 + 미리보기
@@ -526,31 +526,8 @@ class ChapterEditor(tk.Tk):
         pvy.grid(row=0, column=1, sticky="ns")
         self.txt_preview.configure(xscrollcommand=pvx.set, yscrollcommand=pvy.set)
 
-        # 찾기/변경 탭
-        find_tab = ttk.Frame(right, padding=8)
-        right.add(find_tab, text="찾기/변경")
-        find_tab.columnconfigure(1, weight=1)
-
-        scope_frame = ttk.LabelFrame(find_tab, text="찾기 범위", padding=6)
-        scope_frame.grid(row=0, column=0, columnspan=2, sticky="w")
-        self.find_scope = tk.StringVar(value="chapter")
-        ttk.Radiobutton(scope_frame, text="이 분기", variable=self.find_scope, value="chapter").pack(side="left")
-        ttk.Radiobutton(scope_frame, text="프로젝트 전체", variable=self.find_scope, value="project").pack(side="left", padx=10)
-
-        ttk.Label(find_tab, text="찾을 문자열").grid(row=1, column=0, sticky="w", pady=(10,0))
-        self.ent_find = ttk.Entry(find_tab)
-        self.ent_find.grid(row=1, column=1, sticky="ew", pady=(10,0))
-
-        ttk.Label(find_tab, text="바꿀 문자열").grid(row=2, column=0, sticky="w", pady=(6,0))
-        self.ent_replace = ttk.Entry(find_tab)
-        self.ent_replace.grid(row=2, column=1, sticky="ew", pady=(6,0))
-
-        nav = ttk.Frame(find_tab)
-        nav.grid(row=3, column=0, columnspan=2, pady=10)
-        ttk.Button(nav, text="이전", command=lambda: self._find_step(-1)).pack(side="left")
-        ttk.Button(nav, text="다음", command=lambda: self._find_step(1)).pack(side="left", padx=5)
-        ttk.Button(nav, text="바꾸기", command=self._replace_current).pack(side="left", padx=5)
-        self.find_tab = find_tab
+        # 찾기/변경은 새 창에서 열림
+        self.find_win = None
 
         # 하단 버튼 바
         bottom = ttk.Frame(self)
@@ -815,9 +792,52 @@ class ChapterEditor(tk.Tk):
         self._update_preview()
 
     # ---------- 찾기/변경 ----------
-    def _open_find_tab(self):
-        self.nb_right.select(self.find_tab)
+    def _open_find_window(self):
+        if self.find_win is not None and self.find_win.winfo_exists():
+            self.find_win.deiconify()
+            self.find_win.lift()
+            self.ent_find.focus_set()
+            return
+        win = tk.Toplevel(self)
+        win.title("찾기/변경")
+        win.resizable(False, False)
+        win.protocol("WM_DELETE_WINDOW", self._close_find_window)
+        self.find_win = win
+
+        win.columnconfigure(1, weight=1)
+
+        scope_frame = ttk.LabelFrame(win, text="찾기 범위", padding=6)
+        scope_frame.grid(row=0, column=0, columnspan=2, sticky="w")
+        self.find_scope = tk.StringVar(value="chapter")
+        ttk.Radiobutton(scope_frame, text="이 분기", variable=self.find_scope, value="chapter").pack(side="left")
+        ttk.Radiobutton(scope_frame, text="프로젝트 전체", variable=self.find_scope, value="project").pack(side="left", padx=10)
+
+        ttk.Label(win, text="찾을 문자열").grid(row=1, column=0, sticky="w", pady=(10,0))
+        self.ent_find = ttk.Entry(win)
+        self.ent_find.grid(row=1, column=1, sticky="ew", pady=(10,0))
+
+        ttk.Label(win, text="바꿀 문자열").grid(row=2, column=0, sticky="w", pady=(6,0))
+        self.ent_replace = ttk.Entry(win)
+        self.ent_replace.grid(row=2, column=1, sticky="ew", pady=(6,0))
+
+        nav = ttk.Frame(win)
+        nav.grid(row=3, column=0, columnspan=2, pady=10)
+        ttk.Button(nav, text="이전", command=lambda: self._find_step(-1)).pack(side="left")
+        ttk.Button(nav, text="다음", command=lambda: self._find_step(1)).pack(side="left", padx=5)
+        ttk.Button(nav, text="바꾸기", command=self._replace_current).pack(side="left", padx=5)
+
         self.ent_find.focus_set()
+
+    def _close_find_window(self):
+        if self.find_win is not None:
+            self.find_win.destroy()
+            self.find_win = None
+        self.ent_find = None
+        self.ent_replace = None
+        self.find_scope = None
+        self.txt_body.tag_remove("find_highlight", "1.0", tk.END)
+        self.find_results = []
+        self.find_index = -1
 
     def _build_find_results(self, query: str, scope: str):
         self._apply_body_to_model()
