@@ -37,7 +37,7 @@ import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 # ---------- 데이터 모델 ----------
 
@@ -290,6 +290,12 @@ class ChapterEditor(tk.Tk):
         self._refresh_meta_panel()
         self._update_preview()
 
+        # 찾기/변경 상태
+        self.find_results: List[Tuple[str, int]] = []
+        self.find_index: int = -1
+        self._last_find_text: str = ""
+        self._last_find_scope: str = "chapter"
+
     # ---------- UI 구성 ----------
     def _build_menu(self):
         m = tk.Menu(self)
@@ -306,6 +312,8 @@ class ChapterEditor(tk.Tk):
         em = tk.Menu(m, tearoff=0)
         em.add_command(label="챕터 추가", command=self._add_chapter, accelerator="Ctrl+Shift+A")
         em.add_command(label="챕터 삭제", command=self._delete_current_chapter, accelerator="Del")
+        em.add_separator()
+        em.add_command(label="찾기/변경", command=self._open_find_tab, accelerator="Ctrl+F")
         m.add_cascade(label="편집", menu=em)
 
         self.config(menu=m)
@@ -315,6 +323,7 @@ class ChapterEditor(tk.Tk):
         self.bind_all("<Control-s>", lambda e: self._save_file())
         self.bind_all("<Delete>", lambda e: self._delete_current_chapter())
         self.bind_all("<Control-Shift-A>", lambda e: self._add_chapter())
+        self.bind_all("<Control-f>", lambda e: self._open_find_tab())
 
     def _build_ui(self):
         # 좌: 메타 + 챕터 리스트, 우: 챕터 편집 + 선택지 + 미리보기
@@ -366,6 +375,7 @@ class ChapterEditor(tk.Tk):
         # 우측 편집/미리보기 영역
         right = ttk.Notebook(root)
         right.grid(row=0, column=1, sticky="nsew")
+        self.nb_right = right
 
         # 챕터 편집 탭
         edit_tab = ttk.Frame(right, padding=8)
@@ -434,6 +444,32 @@ class ChapterEditor(tk.Tk):
         pvx.grid(row=1, column=0, sticky="ew")
         pvy.grid(row=0, column=1, sticky="ns")
         self.txt_preview.configure(xscrollcommand=pvx.set, yscrollcommand=pvy.set)
+
+        # 찾기/변경 탭
+        find_tab = ttk.Frame(right, padding=8)
+        right.add(find_tab, text="찾기/변경")
+        find_tab.columnconfigure(1, weight=1)
+
+        scope_frame = ttk.LabelFrame(find_tab, text="찾기 범위", padding=6)
+        scope_frame.grid(row=0, column=0, columnspan=2, sticky="w")
+        self.find_scope = tk.StringVar(value="chapter")
+        ttk.Radiobutton(scope_frame, text="이 분기", variable=self.find_scope, value="chapter").pack(side="left")
+        ttk.Radiobutton(scope_frame, text="프로젝트 전체", variable=self.find_scope, value="project").pack(side="left", padx=10)
+
+        ttk.Label(find_tab, text="찾을 문자열").grid(row=1, column=0, sticky="w", pady=(10,0))
+        self.ent_find = ttk.Entry(find_tab)
+        self.ent_find.grid(row=1, column=1, sticky="ew", pady=(10,0))
+
+        ttk.Label(find_tab, text="바꿀 문자열").grid(row=2, column=0, sticky="w", pady=(6,0))
+        self.ent_replace = ttk.Entry(find_tab)
+        self.ent_replace.grid(row=2, column=1, sticky="ew", pady=(6,0))
+
+        nav = ttk.Frame(find_tab)
+        nav.grid(row=3, column=0, columnspan=2, pady=10)
+        ttk.Button(nav, text="이전", command=lambda: self._find_step(-1)).pack(side="left")
+        ttk.Button(nav, text="다음", command=lambda: self._find_step(1)).pack(side="left", padx=5)
+        ttk.Button(nav, text="바꾸기", command=self._replace_current).pack(side="left", padx=5)
+        self.find_tab = find_tab
 
         # 하단 버튼 바
         bottom = ttk.Frame(self)
@@ -673,6 +709,79 @@ class ChapterEditor(tk.Tk):
         self.tree_choices.selection_set(self.tree_choices.get_children()[new_idx])
         self._set_dirty(True)
         self._update_preview()
+
+    # ---------- 찾기/변경 ----------
+    def _open_find_tab(self):
+        self.nb_right.select(self.find_tab)
+        self.ent_find.focus_set()
+
+    def _build_find_results(self, query: str, scope: str):
+        self._apply_body_to_model()
+        results: List[Tuple[str, int]] = []
+        if scope == "chapter" and self.current_chapter_id:
+            ch = self.story.chapters[self.current_chapter_id]
+            text = "\n\n".join(ch.paragraphs)
+            idx = text.find(query)
+            while idx != -1:
+                results.append((self.current_chapter_id, idx))
+                idx = text.find(query, idx + len(query))
+        else:
+            for cid, ch in self.story.chapters.items():
+                text = "\n\n".join(ch.paragraphs)
+                idx = text.find(query)
+                while idx != -1:
+                    results.append((cid, idx))
+                    idx = text.find(query, idx + len(query))
+        self.find_results = results
+        self.find_index = -1
+        self._last_find_text = query
+        self._last_find_scope = scope
+
+    def _find_step(self, delta: int):
+        query = self.ent_find.get()
+        if not query:
+            return
+        scope = self.find_scope.get()
+        if (query != self._last_find_text or scope != self._last_find_scope or
+                not self.find_results):
+            self._build_find_results(query, scope)
+        if not self.find_results:
+            messagebox.showinfo("찾기", "결과가 없습니다.")
+            return
+        self.find_index = (self.find_index + delta) % len(self.find_results)
+        cid, pos = self.find_results[self.find_index]
+        if cid != self.current_chapter_id:
+            self._load_chapter_to_form(cid)
+        self.txt_body.tag_remove("find_highlight", "1.0", tk.END)
+        start = f"1.0+{pos}c"
+        end = f"{start}+{len(query)}c"
+        self.txt_body.tag_add("find_highlight", start, end)
+        self.txt_body.tag_config("find_highlight", background="yellow")
+        self.txt_body.tag_remove(tk.SEL, "1.0", tk.END)
+        self.txt_body.tag_add(tk.SEL, start, end)
+        self.txt_body.mark_set(tk.INSERT, end)
+        self.txt_body.see(start)
+        self.txt_body.focus_set()
+
+    def _replace_current(self):
+        query = self.ent_find.get()
+        if not query:
+            return
+        replacement = self.ent_replace.get()
+        if self.find_index < 0 or not self.find_results:
+            self._find_step(1)
+            if self.find_index < 0 or not self.find_results:
+                return
+        cid, pos = self.find_results[self.find_index]
+        if cid != self.current_chapter_id:
+            self._load_chapter_to_form(cid)
+        start = f"1.0+{pos}c"
+        end = f"{start}+{len(query)}c"
+        self.txt_body.delete(start, end)
+        self.txt_body.insert(start, replacement)
+        self._apply_body_to_model()
+        self._build_find_results(query, self.find_scope.get())
+        self._find_step(1)
 
     def _update_preview(self):
         self._apply_body_to_model()
