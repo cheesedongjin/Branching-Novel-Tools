@@ -270,13 +270,176 @@ class StoryParser:
 
 # ---------- 에디터 GUI ----------
 
+class ConditionRowDialog(tk.Toplevel):
+    def __init__(self, master, variables: List[str], initial: Optional[Tuple[str, str, str]]):
+        super().__init__(master)
+        self.title("조건")
+        self.resizable(False, False)
+        self.result_ok = False
+        self.condition: Optional[Tuple[str, str, str]] = None
+
+        frm = ttk.Frame(self, padding=10)
+        frm.grid(row=0, column=0, sticky="nsew")
+
+        ttk.Label(frm, text="변수").grid(row=0, column=0, sticky="w")
+        self.cmb_var = ttk.Combobox(frm, values=variables, state="readonly", width=20)
+        self.cmb_var.grid(row=1, column=0, sticky="ew", pady=(0,8))
+
+        ttk.Label(frm, text="연산자").grid(row=0, column=1, sticky="w", padx=(8,0))
+        ops = ["==", "!=", ">", "<", ">=", "<="]
+        self.cmb_op = ttk.Combobox(frm, values=ops, state="readonly", width=5)
+        self.cmb_op.grid(row=1, column=1, sticky="w", padx=(8,0))
+
+        ttk.Label(frm, text="값").grid(row=0, column=2, sticky="w", padx=(8,0))
+        self.ent_val = ttk.Entry(frm, width=15)
+        self.ent_val.grid(row=1, column=2, sticky="ew", padx=(8,0))
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=2, column=0, columnspan=3, sticky="e", pady=(10,0))
+        ok = ttk.Button(btns, text="확인", command=self._ok)
+        cancel = ttk.Button(btns, text="취소", command=self._cancel)
+        ok.grid(row=0, column=0, padx=5)
+        cancel.grid(row=0, column=1)
+
+        if initial:
+            var, op, val = initial
+            vals = list(self.cmb_var["values"])
+            if var not in vals:
+                vals.append(var)
+                self.cmb_var["values"] = vals
+            self.cmb_var.set(var)
+            self.cmb_op.set(op)
+            self.ent_val.insert(0, val)
+        else:
+            if variables:
+                self.cmb_var.current(0)
+                self.cmb_op.current(0)
+
+        self.bind("<Return>", lambda e: self._ok())
+        self.bind("<Escape>", lambda e: self._cancel())
+        self.grab_set()
+        self.cmb_var.focus_set()
+        self.wait_window(self)
+
+    def _ok(self):
+        var = self.cmb_var.get().strip()
+        op = self.cmb_op.get().strip()
+        val = self.ent_val.get().strip()
+        if not var or not op or not val:
+            messagebox.showerror("오류", "변수, 연산자, 값을 모두 입력하세요.")
+            return
+        self.condition = (var, op, val)
+        self.result_ok = True
+        self.destroy()
+
+    def _cancel(self):
+        self.result_ok = False
+        self.destroy()
+
+
+class ConditionDialog(tk.Toplevel):
+    def __init__(self, master, variables: List[str], initial: str):
+        super().__init__(master)
+        self.title("조건 편집")
+        self.resizable(False, False)
+        self.result_ok = False
+        self.variables = variables
+        self.conditions: List[Tuple[str, str, str]] = self._parse_initial(initial)
+
+        frm = ttk.Frame(self, padding=10)
+        frm.grid(row=0, column=0, sticky="nsew")
+        frm.rowconfigure(0, weight=1)
+        frm.columnconfigure(0, weight=1)
+
+        self.tree = ttk.Treeview(frm, columns=("var", "op", "val"), show="headings", height=6)
+        self.tree.heading("var", text="변수")
+        self.tree.heading("op", text="연산자")
+        self.tree.heading("val", text="값")
+        self.tree.column("var", width=100, anchor="w")
+        self.tree.column("op", width=60, anchor="w")
+        self.tree.column("val", width=120, anchor="w")
+        self.tree.grid(row=0, column=0, sticky="nsew")
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=0, column=1, sticky="ns", padx=(8,0))
+        ttk.Button(btns, text="추가", command=self._add).grid(row=0, column=0, pady=2)
+        ttk.Button(btns, text="편집", command=self._edit).grid(row=1, column=0, pady=2)
+        ttk.Button(btns, text="삭제", command=self._delete).grid(row=2, column=0, pady=2)
+
+        bottom = ttk.Frame(frm)
+        bottom.grid(row=1, column=0, columnspan=2, sticky="e", pady=(8,0))
+        ok = ttk.Button(bottom, text="확인", command=self._ok)
+        cancel = ttk.Button(bottom, text="취소", command=self._cancel)
+        ok.grid(row=0, column=0, padx=5)
+        cancel.grid(row=0, column=1)
+
+        self._refresh_tree()
+
+        self.bind("<Return>", lambda e: self._ok())
+        self.bind("<Escape>", lambda e: self._cancel())
+        self.grab_set()
+        self.tree.focus_set()
+        self.wait_window(self)
+
+    def _parse_initial(self, expr: str) -> List[Tuple[str, str, str]]:
+        conds: List[Tuple[str, str, str]] = []
+        if not expr:
+            return conds
+        parts = re.split(r"\s+and\s+", expr)
+        for part in parts:
+            m = re.match(r"\s*(\w+)\s*(==|!=|>=|<=|>|<)\s*(.+)\s*", part)
+            if m:
+                conds.append((m.group(1), m.group(2), m.group(3)))
+        return conds
+
+    def _refresh_tree(self):
+        for i in self.tree.get_children():
+            self.tree.delete(i)
+        for var, op, val in self.conditions:
+            self.tree.insert("", tk.END, values=(var, op, val))
+
+    def _add(self):
+        dlg = ConditionRowDialog(self, self.variables, None)
+        if dlg.result_ok and dlg.condition:
+            self.conditions.append(dlg.condition)
+            self._refresh_tree()
+
+    def _edit(self):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        idx = self.tree.index(sel[0])
+        dlg = ConditionRowDialog(self, self.variables, self.conditions[idx])
+        if dlg.result_ok and dlg.condition:
+            self.conditions[idx] = dlg.condition
+            self._refresh_tree()
+
+    def _delete(self):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        idx = self.tree.index(sel[0])
+        self.conditions.pop(idx)
+        self._refresh_tree()
+
+    def _ok(self):
+        self.condition_str = " and ".join(f"{v} {op} {val}" for v, op, val in self.conditions)
+        self.result_ok = True
+        self.destroy()
+
+    def _cancel(self):
+        self.result_ok = False
+        self.destroy()
+
+
 class ChoiceEditor(tk.Toplevel):
-    def __init__(self, master, title: str, choice: Optional[Choice], chapter_ids: List[str]):
+    def __init__(self, master, title: str, choice: Optional[Choice], chapter_ids: List[str], variables: List[str]):
         super().__init__(master)
         self.title(title)
         self.resizable(False, False)
         self.choice: Optional[Choice] = None
         self.result_ok = False
+        self.variables = variables
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
@@ -289,9 +452,13 @@ class ChoiceEditor(tk.Toplevel):
         self.cmb_target = ttk.Combobox(frm, values=chapter_ids, state="readonly", width=30)
         self.cmb_target.grid(row=3, column=0, sticky="w")
 
-        ttk.Label(frm, text="조건식 (빈칸=항상)").grid(row=4, column=0, sticky="w")
-        self.ent_cond = ttk.Entry(frm, width=50)
-        self.ent_cond.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0,8))
+        ttk.Label(frm, text="조건식").grid(row=4, column=0, sticky="w")
+        cond_frame = ttk.Frame(frm)
+        cond_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0,8))
+        cond_frame.columnconfigure(0, weight=1)
+        self.ent_cond = ttk.Entry(cond_frame, width=50, state="readonly")
+        self.ent_cond.grid(row=0, column=0, sticky="ew")
+        ttk.Button(cond_frame, text="편집...", command=self._open_cond_editor).grid(row=0, column=1, padx=(4,0))
 
         btns = ttk.Frame(frm)
         btns.grid(row=6, column=0, sticky="e", pady=(10,0))
@@ -302,15 +469,16 @@ class ChoiceEditor(tk.Toplevel):
 
         if choice:
             self.ent_text.insert(0, choice.text)
-            # target이 목록에 없을 수도 있어 수동 입력 허용 대신 readonly 요구사항 때문에 목록에 없다면 그대로 표시 불가
-            # 따라서 목록에 없다면 일단 values에 추가하여 선택 가능하게 함
             vals = list(self.cmb_target["values"])
             if choice.target_id not in vals:
                 vals.append(choice.target_id)
                 self.cmb_target["values"] = vals
             self.cmb_target.set(choice.target_id)
             if choice.condition:
+                self.ent_cond.configure(state="normal")
+                self.ent_cond.delete(0, tk.END)
                 self.ent_cond.insert(0, choice.condition)
+                self.ent_cond.configure(state="readonly")
         else:
             if chapter_ids:
                 self.cmb_target.current(0)
@@ -340,6 +508,14 @@ class ChoiceEditor(tk.Toplevel):
     def _cancel(self):
         self.result_ok = False
         self.destroy()
+
+    def _open_cond_editor(self):
+        dlg = ConditionDialog(self, self.variables, self.ent_cond.get().strip())
+        if dlg.result_ok:
+            self.ent_cond.configure(state="normal")
+            self.ent_cond.delete(0, tk.END)
+            self.ent_cond.insert(0, dlg.condition_str)
+            self.ent_cond.configure(state="readonly")
 
 class ChapterEditor(tk.Tk):
     def __init__(self):
@@ -733,11 +909,19 @@ class ChapterEditor(tk.Tk):
         self._refresh_chapter_list()
         self._set_dirty(True)
 
+    def _collect_variables(self) -> List[str]:
+        vars_set = set()
+        for ch in self.story.chapters.values():
+            for act in ch.actions:
+                vars_set.add(act.var)
+        return sorted(vars_set)
+
     def _add_choice(self):
         if self.current_chapter_id is None:
             return
         ids = list(self.story.chapters.keys())
-        dlg = ChoiceEditor(self, "선택지 추가", None, ids)
+        vars = self._collect_variables()
+        dlg = ChoiceEditor(self, "선택지 추가", None, ids, vars)
         if dlg.result_ok and dlg.choice:
             ch = self.story.chapters[self.current_chapter_id]
             ch.choices.append(dlg.choice)
@@ -753,7 +937,8 @@ class ChapterEditor(tk.Tk):
         ch = self.story.chapters[self.current_chapter_id]
         cur = ch.choices[idx]
         ids = list(self.story.chapters.keys())
-        dlg = ChoiceEditor(self, "선택지 편집", cur, ids)
+        vars = self._collect_variables()
+        dlg = ChoiceEditor(self, "선택지 편집", cur, ids, vars)
         if dlg.result_ok and dlg.choice:
             ch.choices[idx] = dlg.choice
             self.tree_choices.item(sel[0], values=(dlg.choice.text, dlg.choice.target_id))
