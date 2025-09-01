@@ -11,7 +11,7 @@ Branching Novel GUI (Interactive Fiction with Simple Text Syntax)
   5) 챕터 목록 표시.
 
 - 사용법
-  python branching_novel.py path/to/story.txt
+  python branching_novel.py path/to/story.bnov
   (인자를 생략하면 파일 선택 대화상자가 열림)
 
 - 파일 문법
@@ -730,7 +730,7 @@ def load_text_from_file(path: str) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Branching Novel GUI")
-    parser.add_argument("file", nargs="?", help="Story text file path")
+    parser.add_argument("file", nargs="?", help="Story file path (.bnov)")
     parser.add_argument("--show-disabled", action="store_true", help="Show unavailable choices as disabled")
     args = parser.parse_args()
 
@@ -741,7 +741,7 @@ def main():
         root.withdraw()
         file_path = filedialog.askopenfilename(
             title="소설 파일 선택",
-            filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")]
+            filetypes=[("Branching Novel Files", "*.bnov"), ("All Files", "*.*")]
         )
         root.destroy()
         if not file_path:
