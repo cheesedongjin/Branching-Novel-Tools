@@ -114,6 +114,7 @@ class Story:
     start_id: Optional[str] = None
     ending_text: str = "The End"
     chapters: Dict[str, Chapter] = field(default_factory=dict)
+    variables: Dict[str, Union[int, bool]] = field(default_factory=dict)
 
     def get_chapter(self, cid: str) -> Optional[Chapter]:
         return self.chapters.get(cid)
@@ -186,10 +187,13 @@ class StoryParser:
 
             # 상태 변경 지시문
             if stripped.startswith("!"):
-                if current_chapter is None:
-                    raise ParseError("State change found outside of any chapter.")
                 action = self._parse_action_line(stripped)
-                current_chapter.actions.append(action)
+                if current_chapter is None:
+                    if action.op != "set":
+                        raise ParseError("State change found outside of any chapter.")
+                    story.variables[action.var] = action.value
+                else:
+                    current_chapter.actions.append(action)
                 continue
 
             # 선택지 라인
@@ -594,7 +598,7 @@ class BranchingNovelApp(tk.Tk):
                 break
 
     def _compute_state(self, upto_index: int) -> Dict[str, Union[int, bool]]:
-        state: Dict[str, Union[int, bool]] = {}
+        state: Dict[str, Union[int, bool]] = dict(self.story.variables)
         for i in range(0, upto_index + 1):
             step = self.history[i]
             ch = self.story.get_chapter(step.chapter_id)
