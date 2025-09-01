@@ -7,6 +7,7 @@ Branching Novel Editor (GUI)
   * 작품 제목(@title), 시작 챕터(@start) 설정
   * 챕터(분기) 추가/삭제/편집: id, 제목, 본문
   * 챕터별 선택지(버튼) 추가/삭제/편집: 버튼 문구, 이동 타깃 챕터 id
+  * 챕터 ID 변경 시 해당 ID를 타깃으로 하는 선택지 자동 수정
   * 파일 신규/열기/저장/다른 이름으로 저장
   * 현재 상태를 문법에 맞는 텍스트로 미리보기
   * 기존 포맷(.txt) 불러오기(파싱)
@@ -555,6 +556,7 @@ class ChapterEditor(tk.Tk):
 
         # ID 변경 처리
         cur_id = self.current_chapter_id
+        reload_needed = False
         if new_id != cur_id:
             if new_id in self.story.chapters:
                 messagebox.showerror("오류", f"이미 존재하는 챕터 ID입니다: {new_id}")
@@ -566,15 +568,29 @@ class ChapterEditor(tk.Tk):
             ch_obj.chapter_id = new_id
             self.story.chapters[new_id] = ch_obj
             self.current_chapter_id = new_id
-            # 선택지 타깃에서 참조하던 ID는 수정하지 않음. 필요 시 수동 정리.
+
+            # 다른 챕터들의 선택지 타깃에서 기존 ID를 사용 중인 경우 모두 새 ID로 변경
+            for ch in self.story.chapters.values():
+                for c in ch.choices:
+                    if c.target_id == cur_id:
+                        c.target_id = new_id
+
+            # 시작 챕터가 기존 ID를 가리키면 갱신
             if self.story.start_id == cur_id:
                 self.story.start_id = new_id
-            self._refresh_chapter_list()
+
+            reload_needed = True
 
         # 제목 반영
         self.story.chapters[new_id].title = new_title
+
+        # 리스트/폼 갱신
+        self._refresh_chapter_list()
+        if reload_needed:
+            # 현재 챕터 폼을 다시 로드하여 변경된 선택지 타깃 반영
+            self._load_chapter_to_form(new_id)
+
         self._set_dirty(True)
-        self._refresh_meta_panel()
         self._update_preview()
 
     def _refresh_chapter_list(self):
