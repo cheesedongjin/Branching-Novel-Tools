@@ -133,6 +133,7 @@ class StoryParser:
     """
 
     def parse(self, text: str) -> Story:
+        text = text.lstrip("\ufeff")
         lines = text.splitlines()
         story = Story()
         current_chapter: Optional[Chapter] = None
@@ -160,6 +161,9 @@ class StoryParser:
             line = raw.rstrip("\n")
             stripped = line.strip()
             i += 1
+
+            if stripped.startswith("@"):
+                continue
 
             # 챕터 시작
             if stripped.startswith("#"):
