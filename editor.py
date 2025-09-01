@@ -51,9 +51,9 @@ class Choice:
 
 @dataclass
 class Action:
-    op: str  # 'set' or 'add'
+    op: str  # e.g. 'set', 'add', 'sub', 'mul', 'div', 'floordiv', 'mod', 'pow'
     var: str
-    value: Union[int, bool]
+    value: Union[int, float, bool]
 
 @dataclass
 class Chapter:
@@ -69,7 +69,7 @@ class Story:
     start_id: Optional[str] = None
     ending_text: str = "The End"
     chapters: Dict[str, Chapter] = field(default_factory=dict)
-    variables: Dict[str, Union[int, bool]] = field(default_factory=dict)
+    variables: Dict[str, Union[int, float, bool]] = field(default_factory=dict)
 
     def chapter_ids(self) -> List[str]:
         return list(self.chapters.keys())
@@ -112,11 +112,22 @@ class Story:
             if len(ch.paragraphs) > 0 and len(lines) > 0 and lines[-1] == "":
                 pass
             # actions
+            op_map = {
+                "add": "+=",
+                "sub": "-=",
+                "mul": "*=",
+                "div": "/=",
+                "floordiv": "//=",
+                "mod": "%=",
+                "pow": "**=",
+            }
             for act in ch.actions:
                 if act.op == "set":
                     lines.append(f"! set {act.var} = {act.value}")
-                elif act.op == "add":
-                    lines.append(f"! add {act.var} += {act.value}")
+                else:
+                    sym = op_map.get(act.op)
+                    if sym:
+                        lines.append(f"! {act.var} {sym} {act.value}")
             # choices
             for c in ch.choices:
                 if c.condition:
@@ -264,9 +275,22 @@ class StoryParser:
                 raise ParseError("Invalid add syntax.")
             var, val = rest.split("+=", 1)
             return Action(op="add", var=var.strip(), value=self._parse_value(val.strip()))
+        m = re.match(r"(\w+)\s*(\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)", content)
+        if m:
+            var, op, val = m.groups()
+            op_map = {
+                "+=": "add",
+                "-=": "sub",
+                "*=": "mul",
+                "/=": "div",
+                "//=": "floordiv",
+                "%=": "mod",
+                "**=": "pow",
+            }
+            return Action(op=op_map[op], var=var.strip(), value=self._parse_value(val.strip()))
         raise ParseError("Unknown action command.")
 
-    def _parse_value(self, token: str) -> Union[int, bool]:
+    def _parse_value(self, token: str) -> Union[int, float, bool]:
         t = token.lower()
         if t == "true":
             return True
@@ -275,14 +299,17 @@ class StoryParser:
         try:
             return int(token)
         except ValueError:
-            raise ParseError(f"Invalid value: {token}")
+            try:
+                return float(token)
+            except ValueError:
+                raise ParseError(f"Invalid value: {token}")
 
 # ---------- 에디터 GUI ----------
 
 class ConditionRowDialog(tk.Toplevel):
     def __init__(self, master, variables: List[str], initial: Optional[Tuple[str, str, str]]):
         super().__init__(master)
-        self.title("조건")
+        self.title("조건/행동")
         self.resizable(False, False)
         self.result_ok = False
         self.condition: Optional[Tuple[str, str, str]] = None
@@ -295,8 +322,8 @@ class ConditionRowDialog(tk.Toplevel):
         self.cmb_var.grid(row=1, column=0, sticky="ew", pady=(0,8))
 
         ttk.Label(frm, text="연산자").grid(row=0, column=1, sticky="w", padx=(8,0))
-        ops = ["==", "!=", ">", "<", ">=", "<="]
-        self.cmb_op = ttk.Combobox(frm, values=ops, state="readonly", width=5)
+        ops = ["==", "!=", ">", "<", ">=", "<=", "+=", "-=", "*=", "/=", "//=", "%=", "**="]
+        self.cmb_op = ttk.Combobox(frm, values=ops, state="readonly", width=7)
         self.cmb_op.grid(row=1, column=1, sticky="w", padx=(8,0))
 
         ttk.Label(frm, text="값").grid(row=0, column=2, sticky="w", padx=(8,0))
@@ -353,7 +380,7 @@ class VariableDialog(tk.Toplevel):
         self.resizable(False, False)
         self.result_ok = False
         self.var_name: str = ""
-        self.value: Union[int, bool] = 0
+        self.value: Union[int, float, bool] = 0
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
@@ -386,15 +413,18 @@ class VariableDialog(tk.Toplevel):
             messagebox.showerror("오류", "변수명과 초기값을 입력하세요.")
             return
         if val_text.lower() == "true":
-            val: Union[int, bool] = True
+            val: Union[int, float, bool] = True
         elif val_text.lower() == "false":
             val = False
         else:
             try:
                 val = int(val_text)
             except ValueError:
-                messagebox.showerror("오류", "초기값은 정수 또는 true/false여야 합니다.")
-                return
+                try:
+                    val = float(val_text)
+                except ValueError:
+                    messagebox.showerror("오류", "초기값은 숫자 또는 true/false여야 합니다.")
+                    return
         self.var_name = name
         self.value = val
         self.result_ok = True
@@ -408,7 +438,7 @@ class VariableDialog(tk.Toplevel):
 class ConditionDialog(tk.Toplevel):
     def __init__(self, master, variables: List[str], initial: str, story: Story):
         super().__init__(master)
-        self.title("조건 편집")
+        self.title("조건/행동 편집")
         self.resizable(False, False)
         self.result_ok = False
         self.variables = variables
@@ -425,7 +455,7 @@ class ConditionDialog(tk.Toplevel):
         self.tree.heading("op", text="연산자")
         self.tree.heading("val", text="값")
         self.tree.column("var", width=100, anchor="w")
-        self.tree.column("op", width=60, anchor="w")
+        self.tree.column("op", width=80, anchor="w")
         self.tree.column("val", width=120, anchor="w")
         self.tree.grid(row=0, column=0, sticky="nsew")
 
@@ -457,7 +487,7 @@ class ConditionDialog(tk.Toplevel):
             return conds
         parts = re.split(r"\s+and\s+", expr)
         for part in parts:
-            m = re.match(r"\s*(\w+)\s*(==|!=|>=|<=|>|<)\s*(.+)\s*", part)
+            m = re.match(r"\s*(\w+)\s*(==|!=|>=|<=|>|<|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)\s*", part)
             if m:
                 conds.append((m.group(1), m.group(2), m.group(3)))
         return conds
@@ -532,7 +562,7 @@ class ChoiceEditor(tk.Toplevel):
         self.cmb_target = ttk.Combobox(frm, values=chapter_ids, state="readonly", width=30)
         self.cmb_target.grid(row=3, column=0, sticky="w")
 
-        ttk.Label(frm, text="조건식").grid(row=4, column=0, sticky="w")
+        ttk.Label(frm, text="조건/행동식").grid(row=4, column=0, sticky="w")
         cond_frame = ttk.Frame(frm)
         cond_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0,8))
         cond_frame.columnconfigure(0, weight=1)
@@ -1185,21 +1215,33 @@ class ChapterEditor(tk.Tk):
         """현재 스토리를 간단히 실행해 볼 수 있는 팝업을 띄운다."""
         self._apply_body_to_model()
 
-        state: Dict[str, Union[int, bool]] = {}
+        state: Dict[str, Union[int, float, bool]] = {}
         current: Optional[Chapter] = None
 
         def apply_actions(ch: Chapter):
             for act in ch.actions:
+                cur = state.get(act.var, 0)
+                if isinstance(cur, bool):
+                    cur = int(cur)
+                val = act.value
+                if isinstance(val, bool):
+                    val = int(val)
                 if act.op == "set":
-                    state[act.var] = act.value
+                    state[act.var] = val
                 elif act.op == "add":
-                    cur = state.get(act.var, 0)
-                    if isinstance(cur, bool):
-                        cur = int(cur)
-                    val = act.value
-                    if isinstance(val, bool):
-                        val = int(val)
                     state[act.var] = cur + val
+                elif act.op == "sub":
+                    state[act.var] = cur - val
+                elif act.op == "mul":
+                    state[act.var] = cur * val
+                elif act.op == "div":
+                    state[act.var] = cur / val
+                elif act.op == "floordiv":
+                    state[act.var] = cur // val
+                elif act.op == "mod":
+                    state[act.var] = cur % val
+                elif act.op == "pow":
+                    state[act.var] = cur ** val
 
         def eval_cond(cond: str) -> bool:
             expr = re.sub(r"\btrue\b", "True", cond, flags=re.IGNORECASE)

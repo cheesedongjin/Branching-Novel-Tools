@@ -94,9 +94,9 @@ class Choice:
 
 @dataclass
 class Action:
-    op: str  # 'set' or 'add'
+    op: str  # e.g. 'set', 'add', 'sub', 'mul', 'div', 'floordiv', 'mod', 'pow'
     var: str
-    value: Union[int, bool]
+    value: Union[int, float, bool]
 
 
 @dataclass
@@ -114,7 +114,7 @@ class Story:
     start_id: Optional[str] = None
     ending_text: str = "The End"
     chapters: Dict[str, Chapter] = field(default_factory=dict)
-    variables: Dict[str, Union[int, bool]] = field(default_factory=dict)
+    variables: Dict[str, Union[int, float, bool]] = field(default_factory=dict)
 
     def get_chapter(self, cid: str) -> Optional[Chapter]:
         return self.chapters.get(cid)
@@ -301,9 +301,22 @@ class StoryParser:
                 raise ParseError("Invalid add syntax.")
             var, val = rest.split("+=", 1)
             return Action(op="add", var=var.strip(), value=self._parse_value(val.strip()))
+        m = re.match(r"(\w+)\s*(\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)", content)
+        if m:
+            var, op, val = m.groups()
+            op_map = {
+                "+=": "add",
+                "-=": "sub",
+                "*=": "mul",
+                "/=": "div",
+                "//=": "floordiv",
+                "%=": "mod",
+                "**=": "pow",
+            }
+            return Action(op=op_map[op], var=var.strip(), value=self._parse_value(val.strip()))
         raise ParseError("Unknown action command.")
 
-    def _parse_value(self, token: str) -> Union[int, bool]:
+    def _parse_value(self, token: str) -> Union[int, float, bool]:
         t = token.lower()
         if t == "true":
             return True
@@ -312,7 +325,10 @@ class StoryParser:
         try:
             return int(token)
         except ValueError:
-            raise ParseError(f"Invalid value: {token}")
+            try:
+                return float(token)
+            except ValueError:
+                raise ParseError(f"Invalid value: {token}")
 
 
 @dataclass
@@ -340,7 +356,7 @@ class BranchingNovelApp(tk.Tk):
 
         # 상태 값과 옵션
         self.show_disabled = show_disabled
-        self.state: Dict[str, Union[int, bool]] = {}
+        self.state: Dict[str, Union[int, float, bool]] = {}
 
         # 히스토리와 현재 인덱스
         self.history: List[Step] = []
@@ -601,24 +617,36 @@ class BranchingNovelApp(tk.Tk):
                 self.chapter_list.see(i)
                 break
 
-    def _compute_state(self, upto_index: int) -> Dict[str, Union[int, bool]]:
-        state: Dict[str, Union[int, bool]] = dict(self.story.variables)
+    def _compute_state(self, upto_index: int) -> Dict[str, Union[int, float, bool]]:
+        state: Dict[str, Union[int, float, bool]] = dict(self.story.variables)
         for i in range(0, upto_index + 1):
             step = self.history[i]
             ch = self.story.get_chapter(step.chapter_id)
             if not ch:
                 continue
             for act in ch.actions:
+                cur = state.get(act.var, 0)
+                if isinstance(cur, bool):
+                    cur = int(cur)
+                val = act.value
+                if isinstance(val, bool):
+                    val = int(val)
                 if act.op == "set":
-                    state[act.var] = act.value
+                    state[act.var] = val
                 elif act.op == "add":
-                    cur = state.get(act.var, 0)
-                    if isinstance(cur, bool):
-                        cur = int(cur)
-                    val = act.value
-                    if isinstance(val, bool):
-                        val = int(val)
                     state[act.var] = cur + val
+                elif act.op == "sub":
+                    state[act.var] = cur - val
+                elif act.op == "mul":
+                    state[act.var] = cur * val
+                elif act.op == "div":
+                    state[act.var] = cur / val
+                elif act.op == "floordiv":
+                    state[act.var] = cur // val
+                elif act.op == "mod":
+                    state[act.var] = cur % val
+                elif act.op == "pow":
+                    state[act.var] = cur ** val
         return state
 
     def _evaluate_condition(self, cond: str) -> bool:
@@ -666,8 +694,12 @@ class BranchingNovelApp(tk.Tk):
                 return left * right
             elif isinstance(node.op, ast.Div):
                 return left / right
+            elif isinstance(node.op, ast.FloorDiv):
+                return left // right
             elif isinstance(node.op, ast.Mod):
                 return left % right
+            elif isinstance(node.op, ast.Pow):
+                return left ** right
             else:
                 raise ValueError("Unsupported binary operator")
         elif isinstance(node, ast.Compare):
