@@ -69,6 +69,7 @@ class Story:
     start_id: Optional[str] = None
     ending_text: str = "The End"
     chapters: Dict[str, Chapter] = field(default_factory=dict)
+    variables: Dict[str, Union[int, bool]] = field(default_factory=dict)
 
     def chapter_ids(self) -> List[str]:
         return list(self.chapters.keys())
@@ -92,6 +93,11 @@ class Story:
         if self.start_id:
             lines.append(f"@start: {self.start_id}")
         lines.append(f"@ending: {self.ending_text}")
+        # global variables
+        for var in sorted(self.variables.keys()):
+            val = self.variables[var]
+            val_str = str(val).lower() if isinstance(val, bool) else val
+            lines.append(f"! set {var} = {val_str}")
         lines.append("")  # blank line
 
         # chapters in insertion order
@@ -169,10 +175,13 @@ class StoryParser:
                 continue
 
             if s.startswith("!"):
-                if current is None:
-                    raise ParseError("Action outside of a chapter.")
                 act = self._parse_action(s)
-                current.actions.append(act)
+                if current is None:
+                    if act.op != "set":
+                        raise ParseError("Action outside of a chapter.")
+                    story.variables[act.var] = act.value
+                else:
+                    current.actions.append(act)
                 continue
 
             if s.startswith("* "):
@@ -337,13 +346,73 @@ class ConditionRowDialog(tk.Toplevel):
         self.destroy()
 
 
+class VariableDialog(tk.Toplevel):
+    def __init__(self, master):
+        super().__init__(master)
+        self.title("변수 추가")
+        self.resizable(False, False)
+        self.result_ok = False
+        self.var_name: str = ""
+        self.value: Union[int, bool] = 0
+
+        frm = ttk.Frame(self, padding=10)
+        frm.grid(row=0, column=0, sticky="nsew")
+
+        ttk.Label(frm, text="변수명").grid(row=0, column=0, sticky="w")
+        self.ent_name = ttk.Entry(frm, width=20)
+        self.ent_name.grid(row=1, column=0, sticky="ew", pady=(0,8))
+
+        ttk.Label(frm, text="초기값").grid(row=0, column=1, sticky="w", padx=(8,0))
+        self.ent_val = ttk.Entry(frm, width=10)
+        self.ent_val.grid(row=1, column=1, sticky="ew", padx=(8,0))
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=2, column=0, columnspan=2, sticky="e", pady=(10,0))
+        ok = ttk.Button(btns, text="확인", command=self._ok)
+        cancel = ttk.Button(btns, text="취소", command=self._cancel)
+        ok.grid(row=0, column=0, padx=5)
+        cancel.grid(row=0, column=1)
+
+        self.bind("<Return>", lambda e: self._ok())
+        self.bind("<Escape>", lambda e: self._cancel())
+        self.grab_set()
+        self.ent_name.focus_set()
+        self.wait_window(self)
+
+    def _ok(self):
+        name = self.ent_name.get().strip()
+        val_text = self.ent_val.get().strip()
+        if not name or not val_text:
+            messagebox.showerror("오류", "변수명과 초기값을 입력하세요.")
+            return
+        if val_text.lower() == "true":
+            val: Union[int, bool] = True
+        elif val_text.lower() == "false":
+            val = False
+        else:
+            try:
+                val = int(val_text)
+            except ValueError:
+                messagebox.showerror("오류", "초기값은 정수 또는 true/false여야 합니다.")
+                return
+        self.var_name = name
+        self.value = val
+        self.result_ok = True
+        self.destroy()
+
+    def _cancel(self):
+        self.result_ok = False
+        self.destroy()
+
+
 class ConditionDialog(tk.Toplevel):
-    def __init__(self, master, variables: List[str], initial: str):
+    def __init__(self, master, variables: List[str], initial: str, story: Story):
         super().__init__(master)
         self.title("조건 편집")
         self.resizable(False, False)
         self.result_ok = False
         self.variables = variables
+        self.story = story
         self.conditions: List[Tuple[str, str, str]] = self._parse_initial(initial)
 
         frm = ttk.Frame(self, padding=10)
@@ -365,6 +434,7 @@ class ConditionDialog(tk.Toplevel):
         ttk.Button(btns, text="추가", command=self._add).grid(row=0, column=0, pady=2)
         ttk.Button(btns, text="편집", command=self._edit).grid(row=1, column=0, pady=2)
         ttk.Button(btns, text="삭제", command=self._delete).grid(row=2, column=0, pady=2)
+        ttk.Button(btns, text="변수 추가", command=self._add_variable).grid(row=3, column=0, pady=2)
 
         bottom = ttk.Frame(frm)
         bottom.grid(row=1, column=0, columnspan=2, sticky="e", pady=(8,0))
@@ -421,6 +491,16 @@ class ConditionDialog(tk.Toplevel):
         idx = self.tree.index(sel[0])
         self.conditions.pop(idx)
         self._refresh_tree()
+
+    def _add_variable(self):
+        dlg = VariableDialog(self)
+        if dlg.result_ok:
+            self.story.variables[dlg.var_name] = dlg.value
+            if dlg.var_name not in self.variables:
+                self.variables.append(dlg.var_name)
+            editor = self.master.master
+            editor._set_dirty(True)
+            editor._update_preview()
 
     def _ok(self):
         self.condition_str = " and ".join(f"{v} {op} {val}" for v, op, val in self.conditions)
@@ -510,12 +590,13 @@ class ChoiceEditor(tk.Toplevel):
         self.destroy()
 
     def _open_cond_editor(self):
-        dlg = ConditionDialog(self, self.variables, self.ent_cond.get().strip())
+        dlg = ConditionDialog(self, self.variables, self.ent_cond.get().strip(), self.master.story)
         if dlg.result_ok:
             self.ent_cond.configure(state="normal")
             self.ent_cond.delete(0, tk.END)
             self.ent_cond.insert(0, dlg.condition_str)
             self.ent_cond.configure(state="readonly")
+            self.variables = sorted(set(self.variables) | set(self.master.story.variables.keys()))
 
 class ChapterEditor(tk.Tk):
     def __init__(self):
@@ -910,7 +991,7 @@ class ChapterEditor(tk.Tk):
         self._set_dirty(True)
 
     def _collect_variables(self) -> List[str]:
-        vars_set = set()
+        vars_set = set(self.story.variables.keys())
         for ch in self.story.chapters.values():
             for act in ch.actions:
                 vars_set.add(act.var)
