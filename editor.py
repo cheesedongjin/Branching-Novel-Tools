@@ -511,6 +511,7 @@ class ChapterEditor(tk.Tk):
         ttk.Button(bottom, text="유효성 검사", command=self._validate_story).pack(side="left")
         ttk.Button(bottom, text="저장", command=self._save_file).pack(side="right")
         ttk.Button(bottom, text="미리보기 갱신", command=self._update_preview).pack(side="right", padx=(0,6))
+        ttk.Button(bottom, text="미리보기 실행", command=self._run_preview).pack(side="right", padx=(0,6))
 
     # ---------- 핸들러 ----------
     def _on_title_changed(self):
@@ -846,6 +847,47 @@ class ChapterEditor(tk.Tk):
         self.txt_preview.delete("1.0", tk.END)
         self.txt_preview.insert(tk.END, txt)
         self.txt_preview.config(state="disabled")
+
+    def _run_preview(self):
+        """현재 스토리를 간단히 실행해 볼 수 있는 팝업을 띄운다."""
+        self._apply_body_to_model()
+
+        win = tk.Toplevel(self)
+        win.title("Runtime Preview")
+        win.geometry("600x400")
+
+        text = tk.Text(win, wrap="word", state="disabled")
+        text.pack(fill="both", expand=True, padx=8, pady=8)
+
+        btn_frame = ttk.Frame(win)
+        btn_frame.pack(fill="x", padx=8, pady=(0,8))
+
+        def show(cid: str):
+            ch = self.story.chapters.get(cid)
+            if not ch:
+                messagebox.showerror("오류", f"챕터를 찾을 수 없습니다: {cid}", parent=win)
+                win.destroy()
+                return
+            text.config(state="normal")
+            text.delete("1.0", tk.END)
+            for p in ch.paragraphs:
+                text.insert(tk.END, p + "\n\n")
+            text.config(state="disabled")
+
+            for child in btn_frame.winfo_children():
+                child.destroy()
+            if ch.choices:
+                for c in ch.choices:
+                    ttk.Button(btn_frame, text=c.text, command=lambda t=c.target_id: show(t)).pack(fill="x", pady=2)
+            else:
+                ttk.Button(btn_frame, text="닫기", command=win.destroy).pack(pady=2)
+
+        start = self.story.start_id or next(iter(self.story.chapters.keys()), None)
+        if not start:
+            messagebox.showerror("오류", "챕터가 없습니다.", parent=win)
+            win.destroy()
+            return
+        show(start)
 
     def _validate_story(self):
         errors = []
