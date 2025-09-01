@@ -625,11 +625,16 @@ class BranchingNovelApp(tk.Tk):
 
     def _eval_ast(self, node: ast.AST) -> Any:
         if isinstance(node, ast.BoolOp):
-            values = [self._eval_ast(v) for v in node.values]
             if isinstance(node.op, ast.And):
-                return all(values)
+                for v in node.values:
+                    if not self._eval_ast(v):
+                        return False
+                return True
             elif isinstance(node.op, ast.Or):
-                return any(values)
+                for v in node.values:
+                    if self._eval_ast(v):
+                        return True
+                return False
             else:
                 raise ValueError("Unsupported boolean operator")
         elif isinstance(node, ast.UnaryOp):
