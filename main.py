@@ -78,8 +78,9 @@ import argparse
 import os
 import sys
 import re
+import ast
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple, Union
+from typing import List, Dict, Optional, Tuple, Union, Any
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
@@ -616,17 +617,74 @@ class BranchingNovelApp(tk.Tk):
         expr = self._to_python_expr(cond)
         expr = re.sub(r"\btrue\b", "True", expr, flags=re.IGNORECASE)
         expr = re.sub(r"\bfalse\b", "False", expr, flags=re.IGNORECASE)
-
-        class Env(dict):
-            def __missing__(self, key):
-                return 0
-
-        env = Env()
-        env.update(self.state)
         try:
-            return bool(eval(expr, {"__builtins__": None}, env))
+            tree = ast.parse(expr, mode="eval")
+            return bool(self._eval_ast(tree.body))
         except Exception:
             return False
+
+    def _eval_ast(self, node: ast.AST) -> Any:
+        if isinstance(node, ast.BoolOp):
+            values = [self._eval_ast(v) for v in node.values]
+            if isinstance(node.op, ast.And):
+                return all(values)
+            elif isinstance(node.op, ast.Or):
+                return any(values)
+            else:
+                raise ValueError("Unsupported boolean operator")
+        elif isinstance(node, ast.UnaryOp):
+            operand = self._eval_ast(node.operand)
+            if isinstance(node.op, ast.Not):
+                return not operand
+            elif isinstance(node.op, ast.USub):
+                return -operand
+            elif isinstance(node.op, ast.UAdd):
+                return +operand
+            else:
+                raise ValueError("Unsupported unary operator")
+        elif isinstance(node, ast.BinOp):
+            left = self._eval_ast(node.left)
+            right = self._eval_ast(node.right)
+            if isinstance(node.op, ast.Add):
+                return left + right
+            elif isinstance(node.op, ast.Sub):
+                return left - right
+            elif isinstance(node.op, ast.Mult):
+                return left * right
+            elif isinstance(node.op, ast.Div):
+                return left / right
+            elif isinstance(node.op, ast.Mod):
+                return left % right
+            else:
+                raise ValueError("Unsupported binary operator")
+        elif isinstance(node, ast.Compare):
+            left = self._eval_ast(node.left)
+            for op, comp in zip(node.ops, node.comparators):
+                right = self._eval_ast(comp)
+                if isinstance(op, ast.Eq):
+                    ok = left == right
+                elif isinstance(op, ast.NotEq):
+                    ok = left != right
+                elif isinstance(op, ast.Gt):
+                    ok = left > right
+                elif isinstance(op, ast.GtE):
+                    ok = left >= right
+                elif isinstance(op, ast.Lt):
+                    ok = left < right
+                elif isinstance(op, ast.LtE):
+                    ok = left <= right
+                else:
+                    raise ValueError("Unsupported comparison operator")
+                if not ok:
+                    return False
+                left = right
+            return True
+        elif isinstance(node, ast.Name):
+            return self.state.get(node.id, 0)
+        elif isinstance(node, ast.Constant):
+            return node.value
+        else:
+            raise ValueError("Unsupported expression")
 
     def _to_python_expr(self, cond: str) -> str:
         result = []
