@@ -97,7 +97,7 @@ class Story:
         for var in sorted(self.variables.keys()):
             val = self.variables[var]
             val_str = str(val).lower() if isinstance(val, bool) else val
-            lines.append(f"! set {var} = {val_str}")
+            lines.append(f"! {var} = {val_str}")
         lines.append("")  # blank line
 
         # chapters in insertion order
@@ -123,7 +123,7 @@ class Story:
             }
             for act in ch.actions:
                 if act.op == "set":
-                    lines.append(f"! set {act.var} = {act.value}")
+                    lines.append(f"! {act.var} = {act.value}")
                 else:
                     sym = op_map.get(act.op)
                     if sym:
@@ -275,10 +275,11 @@ class StoryParser:
                 raise ParseError("Invalid add syntax.")
             var, val = rest.split("+=", 1)
             return Action(op="add", var=var.strip(), value=self._parse_value(val.strip()))
-        m = re.match(r"(\w+)\s*(\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)", content)
+        m = re.match(r"(\w+)\s*(=|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)", content)
         if m:
             var, op, val = m.groups()
             op_map = {
+                "=": "set",
                 "+=": "add",
                 "-=": "sub",
                 "*=": "mul",
@@ -322,7 +323,7 @@ class ConditionRowDialog(tk.Toplevel):
         self.cmb_var.grid(row=1, column=0, sticky="ew", pady=(0,8))
 
         ttk.Label(frm, text="연산자").grid(row=0, column=1, sticky="w", padx=(8,0))
-        ops = ["==", "!=", ">", "<", ">=", "<=", "+=", "-=", "*=", "/=", "//=", "%=", "**="]
+        ops = ["==", "!=", ">", "<", ">=", "<=", "=", "+=", "-=", "*=", "/=", "//=", "%=", "**="]
         self.cmb_op = ttk.Combobox(frm, values=ops, state="readonly", width=7)
         self.cmb_op.grid(row=1, column=1, sticky="w", padx=(8,0))
 
@@ -330,8 +331,17 @@ class ConditionRowDialog(tk.Toplevel):
         self.ent_val = ttk.Entry(frm, width=15)
         self.ent_val.grid(row=1, column=2, sticky="ew", padx=(8,0))
 
+        help_text = (
+            "연산자 표:\n"
+            "=  : 대입\n"
+            "+= : 더해서 대입, -= : 빼서 대입, *= : 곱해서 대입, /= : 나누어 대입\n"
+            "//= : 몫만 대입, %= : 나머지 대입, **= : 거듭제곱 대입\n"
+            "== : 같음, != : 다름, > : 큼, < : 작음, >= : 크거나 같음, <= : 작거나 같음"
+        )
+        ttk.Label(frm, text=help_text, justify="left").grid(row=2, column=0, columnspan=3, sticky="w", pady=(8,0))
+
         btns = ttk.Frame(frm)
-        btns.grid(row=2, column=0, columnspan=3, sticky="e", pady=(10,0))
+        btns.grid(row=3, column=0, columnspan=3, sticky="e", pady=(10,0))
         ok = ttk.Button(btns, text="확인", command=self._ok)
         cancel = ttk.Button(btns, text="취소", command=self._cancel)
         ok.grid(row=0, column=0, padx=5)
@@ -487,7 +497,7 @@ class ConditionDialog(tk.Toplevel):
             return conds
         parts = re.split(r"\s+and\s+", expr)
         for part in parts:
-            m = re.match(r"\s*(\w+)\s*(==|!=|>=|<=|>|<|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)\s*", part)
+            m = re.match(r"\s*(\w+)\s*(==|!=|>=|<=|>|<|=|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)\s*", part)
             if m:
                 conds.append((m.group(1), m.group(2), m.group(3)))
         return conds

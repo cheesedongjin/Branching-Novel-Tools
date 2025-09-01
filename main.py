@@ -301,10 +301,11 @@ class StoryParser:
                 raise ParseError("Invalid add syntax.")
             var, val = rest.split("+=", 1)
             return Action(op="add", var=var.strip(), value=self._parse_value(val.strip()))
-        m = re.match(r"(\w+)\s*(\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)", content)
+        m = re.match(r"(\w+)\s*(=|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)", content)
         if m:
             var, op, val = m.groups()
             op_map = {
+                "=": "set",
                 "+=": "add",
                 "-=": "sub",
                 "*=": "mul",
