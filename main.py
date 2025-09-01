@@ -77,8 +77,9 @@ Branching Novel GUI (Interactive Fiction with Simple Text Syntax)
 import argparse
 import os
 import sys
+import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Union
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
@@ -87,6 +88,14 @@ from tkinter import ttk, filedialog, messagebox
 class Choice:
     text: str
     target_id: str
+    condition: Optional[str] = None
+
+
+@dataclass
+class Action:
+    op: str  # 'set' or 'add'
+    var: str
+    value: Union[int, bool]
 
 
 @dataclass
@@ -95,6 +104,7 @@ class Chapter:
     title: str
     paragraphs: List[str] = field(default_factory=list)
     choices: List[Choice] = field(default_factory=list)
+    actions: List[Action] = field(default_factory=list)
 
 
 @dataclass
@@ -169,6 +179,14 @@ class StoryParser:
                     paragraph_buffer.clear()
                 continue
 
+            # 상태 변경 지시문
+            if stripped.startswith("!"):
+                if current_chapter is None:
+                    raise ParseError("State change found outside of any chapter.")
+                action = self._parse_action_line(stripped)
+                current_chapter.actions.append(action)
+                continue
+
             # 선택지 라인
             if stripped.startswith("* "):
                 if current_chapter is None:
@@ -234,17 +252,54 @@ class StoryParser:
 
     def _parse_choice_line(self, line: str) -> Choice:
         """
-        형식: "* text -> target_id"
+        형식: "* [조건] text -> target_id" 또는 "* text -> target_id"
         """
         body = line[2:].strip()
         if "->" not in body:
             raise ParseError("Choice line must contain '->'.")
         left, right = body.split("->", 1)
-        text = left.strip()
+        left = left.strip()
+        condition: Optional[str] = None
+        text: str
+        if left.startswith("["):
+            end = left.find("]")
+            if end == -1:
+                raise ParseError("Missing closing ']' in condition.")
+            condition = left[1:end].strip()
+            text = left[end + 1:].strip()
+        else:
+            text = left
         target = right.strip()
         if not text or not target:
             raise ParseError("Choice text or target is empty.")
-        return Choice(text=text, target_id=target)
+        return Choice(text=text, target_id=target, condition=condition)
+
+    def _parse_action_line(self, line: str) -> Action:
+        content = line[1:].strip()
+        if content.startswith("set "):
+            rest = content[4:].strip()
+            if "=" not in rest:
+                raise ParseError("Invalid set syntax.")
+            var, val = rest.split("=", 1)
+            return Action(op="set", var=var.strip(), value=self._parse_value(val.strip()))
+        if content.startswith("add "):
+            rest = content[4:].strip()
+            if "+=" not in rest:
+                raise ParseError("Invalid add syntax.")
+            var, val = rest.split("+=", 1)
+            return Action(op="add", var=var.strip(), value=self._parse_value(val.strip()))
+        raise ParseError("Unknown action command.")
+
+    def _parse_value(self, token: str) -> Union[int, bool]:
+        t = token.lower()
+        if t == "true":
+            return True
+        if t == "false":
+            return False
+        try:
+            return int(token)
+        except ValueError:
+            raise ParseError(f"Invalid value: {token}")
 
 
 @dataclass
@@ -262,13 +317,17 @@ class BranchingNovelApp(tk.Tk):
     Tkinter 기반 GUI 애플리케이션
     """
 
-    def __init__(self, story: Story, file_path: str):
+    def __init__(self, story: Story, file_path: str, show_disabled: bool = False):
         super().__init__()
         self.title(f"{story.title} - Branching Novel")
         self.geometry("1000x700")
 
         self.story = story
         self.file_path = file_path
+
+        # 상태 값과 옵션
+        self.show_disabled = show_disabled
+        self.state: Dict[str, Union[int, bool]] = {}
 
         # 히스토리와 현재 인덱스
         self.history: List[Step] = []
@@ -423,6 +482,8 @@ class BranchingNovelApp(tk.Tk):
         ch = self._current_chapter()
         if not ch:
             return
+        # 현재 상태 계산
+        self.state = self._compute_state(self.current_index)
         # 본문 렌더
         self._set_text_content(self._format_chapter_text(ch))
         # 선택지 렌더
@@ -455,16 +516,28 @@ class BranchingNovelApp(tk.Tk):
         for w in self.choice_frame.winfo_children():
             w.destroy()
 
-        if not ch.choices:
+        display: List[Tuple[Choice, bool]] = []  # (choice, disabled)
+        for choice in ch.choices:
+            ok = True
+            if choice.condition:
+                ok = self._evaluate_condition(choice.condition)
+            if ok:
+                display.append((choice, False))
+            elif self.show_disabled:
+                display.append((choice, True))
+
+        if not display:
             lbl = ttk.Label(self.choice_frame, text="선택지가 없습니다. '다음' 또는 챕터 목록을 사용하세요.")
             lbl.grid(row=0, column=0, sticky="w")
             return
 
         # 버튼 생성
-        for idx, choice in enumerate(ch.choices):
-            btn = ttk.Button(self.choice_frame, text=f"{idx+1}. {choice.text}",
+        for idx, (choice, disabled) in enumerate(display, 1):
+            btn = ttk.Button(self.choice_frame, text=f"{idx}. {choice.text}",
                              command=lambda c=choice: self._choose(c))
-            btn.grid(row=idx, column=0, sticky="ew", pady=2)
+            if disabled:
+                btn.state(["disabled"])
+            btn.grid(row=idx-1, column=0, sticky="ew", pady=2)
 
     def _choose(self, choice: Choice):
         # 타겟 챕터 유효성 검사
@@ -513,6 +586,65 @@ class BranchingNovelApp(tk.Tk):
                 self.chapter_list.see(i)
                 break
 
+    def _compute_state(self, upto_index: int) -> Dict[str, Union[int, bool]]:
+        state: Dict[str, Union[int, bool]] = {}
+        for i in range(0, upto_index + 1):
+            step = self.history[i]
+            ch = self.story.get_chapter(step.chapter_id)
+            if not ch:
+                continue
+            for act in ch.actions:
+                if act.op == "set":
+                    state[act.var] = act.value
+                elif act.op == "add":
+                    cur = state.get(act.var, 0)
+                    if isinstance(cur, bool):
+                        cur = int(cur)
+                    val = act.value
+                    if isinstance(val, bool):
+                        val = int(val)
+                    state[act.var] = cur + val
+        return state
+
+    def _evaluate_condition(self, cond: str) -> bool:
+        expr = self._to_python_expr(cond)
+        expr = re.sub(r"\btrue\b", "True", expr, flags=re.IGNORECASE)
+        expr = re.sub(r"\bfalse\b", "False", expr, flags=re.IGNORECASE)
+
+        class Env(dict):
+            def __missing__(self, key):
+                return 0
+
+        env = Env()
+        env.update(self.state)
+        try:
+            return bool(eval(expr, {"__builtins__": None}, env))
+        except Exception:
+            return False
+
+    def _to_python_expr(self, cond: str) -> str:
+        result = []
+        i = 0
+        while i < len(cond):
+            ch = cond[i]
+            if ch == '!':
+                if i + 1 < len(cond) and cond[i + 1] == '=':
+                    result.append('!=')
+                    i += 2
+                else:
+                    result.append(' not ')
+                    i += 1
+            elif ch == '&':
+                result.append(' and ')
+                i += 1
+            elif ch == '|':
+                result.append(' or ')
+                i += 1
+            else:
+                result.append(ch)
+                i += 1
+        return ''.join(result)
+
 
 def load_text_from_file(path: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
@@ -522,6 +654,7 @@ def load_text_from_file(path: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Branching Novel GUI")
     parser.add_argument("file", nargs="?", help="Story text file path")
+    parser.add_argument("--show-disabled", action="store_true", help="Show unavailable choices as disabled")
     args = parser.parse_args()
 
     file_path = args.file
@@ -552,7 +685,7 @@ def main():
         messagebox.showerror("오류", f"파일을 읽는 중 오류가 발생했습니다:\n{e}")
         sys.exit(1)
 
-    app = BranchingNovelApp(story, file_path)
+    app = BranchingNovelApp(story, file_path, show_disabled=args.show_disabled)
     app.mainloop()
 
 
