@@ -948,6 +948,7 @@ class ChapterEditor(tk.Tk):
                 win.destroy()
                 return
             current = ch
+            apply_actions(ch)
             text.config(state="normal")
             text.delete("1.0", tk.END)
             for p in ch.paragraphs:
@@ -972,8 +973,6 @@ class ChapterEditor(tk.Tk):
                 ttk.Button(btn_frame, text="닫기", command=win.destroy).pack(pady=2)
 
         def choose(choice: Choice):
-            if current:
-                apply_actions(current)
             show(choice.target_id)
 
         start = self.story.start_id or next(iter(self.story.chapters.keys()), None)
