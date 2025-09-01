@@ -1065,7 +1065,7 @@ class ChapterEditor(tk.Tk):
         start = f"1.0+{pos}c"
         end = f"{start}+{len(query)}c"
         self.txt_body.tag_add("find_highlight", start, end)
-        self.txt_body.tag_config("find_highlight", background="yellow")
+        self.txt_body.tag_config("find_highlight", background="yellow", foreground="black")
         self.txt_body.tag_remove(tk.SEL, "1.0", tk.END)
         self.txt_body.tag_add(tk.SEL, start, end)
         self.txt_body.mark_set(tk.INSERT, end)
