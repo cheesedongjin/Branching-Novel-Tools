@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Branching Novel Editor (GUI)
-- 분기형 소설 문법을 직접 쓰지 않고 GUI로 작성하여 .txt를 자동 생성
+- 분기형 소설 문법을 직접 쓰지 않고 GUI로 작성하여 .bnov를 자동 생성
 - 기능:
   * 작품 제목(@title), 시작 챕터(@start) 설정
   * 챕터(분기) 추가/삭제/편집: id, 제목, 본문
@@ -10,7 +10,7 @@ Branching Novel Editor (GUI)
   * 챕터 ID 변경 시 해당 ID를 타깃으로 하는 선택지 자동 수정
   * 파일 신규/열기/저장/다른 이름으로 저장
   * 현재 상태를 문법에 맞는 텍스트로 미리보기
-  * 기존 포맷(.txt) 불러오기(파싱)
+  * 기존 포맷(.bnov) 불러오기(파싱)
 
 문법 포맷(생성 결과):
   @title: 작품 제목
@@ -770,7 +770,7 @@ class ChapterEditor(tk.Tk):
 
         # 미리보기 탭
         preview_tab = ttk.Frame(right, padding=8)
-        right.add(preview_tab, text="생성 미리보기(.txt)")
+        right.add(preview_tab, text="생성 미리보기(.bnov)")
         preview_tab.rowconfigure(0, weight=1)
         preview_tab.columnconfigure(0, weight=1)
 
@@ -1324,7 +1324,7 @@ class ChapterEditor(tk.Tk):
     def _open_file(self):
         if not self._confirm_discard_changes():
             return
-        path = filedialog.askopenfilename(title="열기", filetypes=[("Text Files","*.txt"),("All Files","*.*")])
+        path = filedialog.askopenfilename(title="열기", filetypes=[("Branching Novel Files","*.bnov"),("All Files","*.*")])
         if not path:
             return
         try:
@@ -1373,9 +1373,9 @@ class ChapterEditor(tk.Tk):
         self._apply_body_to_model()
         path = filedialog.asksaveasfilename(
             title="다른 이름으로 저장",
-            defaultextension=".txt",
-            filetypes=[("Text Files","*.txt"),("All Files","*.*")],
-            initialfile="story.txt"
+            defaultextension=".bnov",
+            filetypes=[("Branching Novel Files","*.bnov"),("All Files","*.*")],
+            initialfile="story.bnov"
         )
         if not path:
             return
