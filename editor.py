@@ -70,6 +70,7 @@ class Story:
     title: str = "Untitled"
     start_id: Optional[str] = None  # 시작 분기 ID
     ending_text: str = "The End"
+    show_disabled: bool = False
     chapters: Dict[str, Chapter] = field(default_factory=dict)
     branches: Dict[str, Branch] = field(default_factory=dict)
     variables: Dict[str, Union[int, float, bool]] = field(default_factory=dict)
@@ -110,6 +111,8 @@ class Story:
         if self.start_id:
             lines.append(f"@start: {self.start_id}")
         lines.append(f"@ending: {self.ending_text}")
+        if self.show_disabled:
+            lines.append("@show-disabled: true")
         for var in sorted(self.variables.keys()):
             val = self.variables[var]
             val_str = str(val).lower() if isinstance(val, bool) else val
@@ -177,6 +180,10 @@ class StoryParser:
             if line.startswith("@ending:"):
                 story.ending_text = line[len("@ending:"):].strip() or "The End"
                 continue
+            if line.startswith("@show-disabled:"):
+                val = line[len("@show-disabled:"):].strip().lower()
+                story.show_disabled = val in ("true", "1", "yes", "on")
+                continue
 
         i = 0
         while i < len(lines):
@@ -185,7 +192,7 @@ class StoryParser:
             stripped = line.strip()
             i += 1
 
-            if stripped.startswith(("@title:", "@start:", "@ending:")):
+            if stripped.startswith(("@title:", "@start:", "@ending:", "@show-disabled:")):
                 continue
 
             if stripped.startswith("@chapter"):
@@ -791,6 +798,15 @@ class ChapterEditor(tk.Tk):
         self.ent_end.insert(0, self.story.ending_text)
         self.ent_end.bind("<KeyRelease>", lambda e: self._on_ending_changed())
 
+        self.var_show_disabled = tk.BooleanVar(value=self.story.show_disabled)
+        self.chk_show_disabled = ttk.Checkbutton(
+            meta,
+            text="비활성 선택지 표시",
+            variable=self.var_show_disabled,
+            command=self._on_show_disabled_changed,
+        )
+        self.chk_show_disabled.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
         # 변수 목록
         var_frame = ttk.LabelFrame(left, text="변수 목록", padding=8)
         var_frame.grid(row=1, column=0, sticky="ew", pady=(8, 0))
@@ -974,6 +990,11 @@ class ChapterEditor(tk.Tk):
 
     def _on_ending_changed(self):
         self.story.ending_text = self.ent_end.get().strip() or "The End"
+        self._set_dirty(True)
+        self._update_preview()
+
+    def _on_show_disabled_changed(self):
+        self.story.show_disabled = self.var_show_disabled.get()
         self._set_dirty(True)
         self._update_preview()
 
@@ -1182,6 +1203,7 @@ class ChapterEditor(tk.Tk):
             self.story.start_id = ids[0]
         self.ent_end.delete(0, tk.END)
         self.ent_end.insert(0, self.story.ending_text)
+        self.var_show_disabled.set(self.story.show_disabled)
         self._refresh_variable_list()
 
     def _add_chapter(self):
@@ -1593,7 +1615,7 @@ class ChapterEditor(tk.Tk):
 
         preview_story = copy.deepcopy(self.story)
         file_path = self.current_file or "<preview>"
-        app = BranchingNovelApp(preview_story, file_path)
+        app = BranchingNovelApp(preview_story, file_path, show_disabled=self.story.show_disabled)
         app.mainloop()
 
     def _validate_story(self):
