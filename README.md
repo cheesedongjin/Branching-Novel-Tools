@@ -59,4 +59,3 @@ You wake up in a dark room.
 ```
 python branching_novel.py path/to/story.bnov
 ```
-Include `@show-disabled: true` in the story file to display unavailable choices as disabled buttons.
