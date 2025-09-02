@@ -673,6 +673,9 @@ class ChapterEditor(tk.Tk):
         self._last_find_text: str = ""
         self._last_find_scope: str = "chapter"
 
+        # 창 닫힘 이벤트에 종료 처리 연결
+        self.protocol("WM_DELETE_WINDOW", self._exit_app)
+
     # ---------- UI 구성 ----------
     def _build_menu(self):
         m = tk.Menu(self)
