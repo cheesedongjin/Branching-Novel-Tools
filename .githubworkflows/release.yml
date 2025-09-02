@@ -1,26 +1,35 @@
-name: Build & Release (Editor + Viewer)
+name: Build & Release (robust)
 
 on:
   push:
     tags:
-      - "v*"
-  workflow_dispatch:
+      - "v*"          # v1.2.3 같은 태그
+      - "[0-9]*"      # 1.2.3 같이 v 없는 태그도 허용 (glob)
+  create:             # GitHub UI에서 태그만 만든 경우
+  workflow_dispatch:  # 수동 실행
 
 permissions:
   contents: write
 
 env:
   PYTHON_VERSION: "3.11"
+
+  # 앱 이름/엔트리(필요에 맞게 바꾸세요)
   EDITOR_APPNAME: "BranchingNovelEditor"
   VIEWER_APPNAME: "BranchingNovelGUI"
   EDITOR_ENTRY: "branching_novel_editor.py"
-  VIEWER_ENTRY: "branching_novel.py"      # 파일명 맞게 수정
+  VIEWER_ENTRY: "branching_novel.py"
   EDITOR_EXE: "BranchingNovelEditor.exe"
   VIEWER_EXE: "BranchingNovelGUI.exe"
 
 jobs:
   build-windows:
+    name: Build Windows
     runs-on: windows-latest
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
+      (github.event_name == 'create' && github.event.ref_type == 'tag') ||
+      (github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,8 +43,9 @@ jobs:
           pip install -r requirements-build.txt
           pip install pyinstaller pillow
 
-      - name: (Optional) Generate .ico from PNG
+      - name: Optional icon (.ico) from PNG
         shell: pwsh
+        continue-on-error: true
         run: |
           if (Test-Path assets/icons/appicon.png) {
             $code = @'
@@ -48,7 +58,7 @@ jobs:
             Set-Content gen_ico.py $code -Encoding UTF8
             python gen_ico.py
           } else {
-            echo "no PNG icon, skip ico generation"
+            echo "no PNG icon, skip"
           }
 
       - name: Build Editor (folder mode)
@@ -57,15 +67,6 @@ jobs:
           $iconArg = (Test-Path assets/icons/app.ico) ? "--icon assets/icons/app.ico" : ""
           pyinstaller --noconfirm --windowed -n $env:EDITOR_APPNAME $iconArg $env:EDITOR_ENTRY
           if (!(Test-Path "dist/$env:EDITOR_APPNAME")) { Write-Error "Editor dist missing"; exit 1 }
-          New-Item -ItemType Directory -Force -Path release | Out-Null
-          $version = "${env:GITHUB_REF_NAME}"
-          if ($version.StartsWith("refs/tags/")) { $version = $version.Substring(10) }
-          if ($version.StartsWith("v")) { $version = $version.Substring(1) }
-          $verZip = "release/${env:EDITOR_APPNAME}-$version-windows-x64.zip"
-          Compress-Archive -Path "dist/${env:EDITOR_APPNAME}/*" -DestinationPath $verZip
-          Copy-Item $verZip "release/latest-editor.zip" -Force
-          $h = (Get-FileHash "release/latest-editor.zip" -Algorithm SHA256).Hash.ToLower()
-          "$h  latest-editor.zip" | Out-File -Encoding ascii "release/latest-editor.sha256"
 
       - name: Build Viewer (folder mode)
         shell: pwsh
@@ -73,30 +74,44 @@ jobs:
           $iconArg = (Test-Path assets/icons/app.ico) ? "--icon assets/icons/app.ico" : ""
           pyinstaller --noconfirm --windowed -n $env:VIEWER_APPNAME $iconArg $env:VIEWER_ENTRY
           if (!(Test-Path "dist/$env:VIEWER_APPNAME")) { Write-Error "Viewer dist missing"; exit 1 }
+
+      - name: Package ZIPs + latest.* for online installers
+        shell: pwsh
+        run: |
           $version = "${env:GITHUB_REF_NAME}"
           if ($version.StartsWith("refs/tags/")) { $version = $version.Substring(10) }
           if ($version.StartsWith("v")) { $version = $version.Substring(1) }
-          $verZip = "release/${env:VIEWER_APPNAME}-$version-windows-x64.zip"
-          Compress-Archive -Path "dist/${env:VIEWER_APPNAME}/*" -DestinationPath $verZip
-          Copy-Item $verZip "release/latest-viewer.zip" -Force
-          $h = (Get-FileHash "release/latest-viewer.zip" -Algorithm SHA256).Hash.ToLower()
-          "$h  latest-viewer.zip" | Out-File -Encoding ascii "release/latest-viewer.sha256"
+          New-Item -ItemType Directory -Force -Path release | Out-Null
 
-      - name: Upload windows artifacts
+          $ezip = "release/${env:EDITOR_APPNAME}-$version-windows-x64.zip"
+          Compress-Archive -Path "dist/${env:EDITOR_APPNAME}/*" -DestinationPath $ezip
+          Copy-Item $ezip "release/latest-editor.zip" -Force
+          $eh = (Get-FileHash "release/latest-editor.zip" -Algorithm SHA256).Hash.ToLower()
+          "$eh  latest-editor.zip" | Out-File -Encoding ascii "release/latest-editor.sha256"
+
+          $vzip = "release/${env:VIEWER_APPNAME}-$version-windows-x64.zip"
+          Compress-Archive -Path "dist/${env:VIEWER_APPNAME}/*" -DestinationPath $vzip
+          Copy-Item $vzip "release/latest-viewer.zip" -Force
+          $vh = (Get-FileHash "release/latest-viewer.zip" -Algorithm SHA256).Hash.ToLower()
+          "$vh  latest-viewer.zip" | Out-File -Encoding ascii "release/latest-viewer.sha256"
+
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-zips
+          name: windows-artifacts
           path: release/*
 
   build-inno-installers:
+    name: Build Windows Online Installers
     runs-on: windows-latest
     needs: build-windows
+    if: always()
     steps:
       - uses: actions/checkout@v4
       - name: Download windows artifacts
         uses: actions/download-artifact@v4
         with:
-          name: windows-zips
+          name: windows-artifacts
           path: release
 
       - name: Install Inno Setup
@@ -107,6 +122,7 @@ jobs:
 
       - name: Compile Editor Installer
         shell: pwsh
+        if: ${{ hashFiles('release/latest-editor.zip') != '' && hashFiles('installer.iss') != '' }}
         run: |
           $ownerRepo = "${env:GITHUB_REPOSITORY}"
           $version = "${env:GITHUB_REF_NAME}"
@@ -114,18 +130,13 @@ jobs:
           if ($version.StartsWith("v")) { $version = $version.Substring(1) }
           $zipURL = "https://github.com/$ownerRepo/releases/latest/download/latest-editor.zip"
           $shaURL = "https://github.com/$ownerRepo/releases/latest/download/latest-editor.sha256"
-          iscc `
-            /DMyAppName="${env:EDITOR_APPNAME}" `
-            /DMyAppVersion="$version" `
-            /DMyAppExe="${env:EDITOR_EXE}" `
-            /DPayloadZipURL="$zipURL" `
-            /DPayloadShaURL="$shaURL" `
-            installer.iss
+          iscc /DMyAppName="${env:EDITOR_APPNAME}" /DMyAppVersion="$version" /DMyAppExe="${env:EDITOR_EXE}" /DPayloadZipURL="$zipURL" /DPayloadShaURL="$shaURL" installer.iss
           New-Item -ItemType Directory -Force -Path release | Out-Null
           Copy-Item ".\Output\${env:EDITOR_APPNAME}-Online-Setup.exe" "release/${env:EDITOR_APPNAME}-Online-Setup.exe" -Force
 
       - name: Compile Viewer Installer
         shell: pwsh
+        if: ${{ hashFiles('release/latest-viewer.zip') != '' && hashFiles('installer.iss') != '' }}
         run: |
           $ownerRepo = "${env:GITHUB_REPOSITORY}"
           $version = "${env:GITHUB_REF_NAME}"
@@ -133,23 +144,23 @@ jobs:
           if ($version.StartsWith("v")) { $version = $version.Substring(1) }
           $zipURL = "https://github.com/$ownerRepo/releases/latest/download/latest-viewer.zip"
           $shaURL = "https://github.com/$ownerRepo/releases/latest/download/latest-viewer.sha256"
-          iscc `
-            /DMyAppName="${env:VIEWER_APPNAME}" `
-            /DMyAppVersion="$version" `
-            /DMyAppExe="${env:VIEWER_EXE}" `
-            /DPayloadZipURL="$zipURL" `
-            /DPayloadShaURL="$shaURL" `
-            installer.iss
+          iscc /DMyAppName="${env:VIEWER_APPNAME}" /DMyAppVersion="$version" /DMyAppExe="${env:VIEWER_EXE}" /DPayloadZipURL="$zipURL" /DPayloadShaURL="$shaURL" installer.iss
           Copy-Item ".\Output\${env:VIEWER_APPNAME}-Online-Setup.exe" "release/${env:VIEWER_APPNAME}-Online-Setup.exe" -Force
 
       - name: Upload installers
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: windows-installers
           path: release/*Setup.exe
 
   build-macos:
+    name: Build macOS
     runs-on: macos-latest
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
+      (github.event_name == 'create' && github.event.ref_type == 'tag') ||
+      (github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -163,27 +174,32 @@ jobs:
       - name: Build Editor
         run: |
           pyinstaller -F --windowed -n "$EDITOR_APPNAME" "$EDITOR_ENTRY"
-          version="${GITHUB_REF_NAME#refs/tags/}"; version="${version#v}"
+          v="${GITHUB_REF_NAME#refs/tags/}"; v="${v#v}"
           mkdir -p release
-          zip -j "release/${EDITOR_APPNAME}-${version}-macos.zip" "dist/${EDITOR_APPNAME}"
+          zip -j "release/${EDITOR_APPNAME}-${v}-macos.zip" "dist/${EDITOR_APPNAME}"
       - name: Build Viewer
         run: |
           pyinstaller -F --windowed -n "$VIEWER_APPNAME" "$VIEWER_ENTRY"
-          version="${GITHUB_REF_NAME#refs/tags/}"; version="${version#v}"
-          zip -j "release/${VIEWER_APPNAME}-${version}-macos.zip" "dist/${VIEWER_APPNAME}"
+          v="${GITHUB_REF_NAME#refs/tags/}"; v="${v#v}"
+          zip -j "release/${VIEWER_APPNAME}-${v}-macos.zip" "dist/${VIEWER_APPNAME}"
       - name: Upload mac artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-zips
+          name: macos-artifacts
           path: release/*.zip
 
   build-linux:
+    name: Build Linux
     runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
+      (github.event_name == 'create' && github.event.ref_type == 'tag') ||
+      (github.event_name == 'workflow_dispatch')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: ${{ env:PYPYTHON_VERSION || env.PYTHON_VERSION }}
       - name: Install Tk + deps
         run: |
           sudo apt-get update
@@ -194,32 +210,34 @@ jobs:
       - name: Build Editor
         run: |
           pyinstaller -F -n branching-novel-editor "$EDITOR_ENTRY"
-          version="${GITHUB_REF_NAME#refs/tags/}"; version="${version#v}"
+          v="${GITHUB_REF_NAME#refs/tags/}"; v="${v#v}"
           mkdir -p release
-          zip -j "release/branching-novel-editor-${version}-linux-x64.zip" "dist/branching-novel-editor"
+          zip -j "release/branching-novel-editor-${v}-linux-x64.zip" "dist/branching-novel-editor"
       - name: Build Viewer
         run: |
           pyinstaller -F -n branching-novel-gui "$VIEWER_ENTRY"
-          version="${GITHUB_REF_NAME#refs/tags/}"; version="${version#v}"
-          zip -j "release/branching-novel-gui-${version}-linux-x64.zip" "dist/branching-novel-gui"
+          v="${GITHUB_REF_NAME#refs/tags/}"; v="${v#v}"
+          zip -j "release/branching-novel-gui-${v}-linux-x64.zip" "dist/branching-novel-gui"
       - name: Upload linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-zips
+          name: linux-artifacts
           path: release/*.zip
 
   release:
+    name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [build-windows, build-inno-installers, build-macos, build-linux]
+    if: always()
     steps:
-      - name: Download all artifacts
+      - name: Download all artifacts (whatever succeeded)
         uses: actions/download-artifact@v4
         with:
-          pattern: "*"
+          pattern: "*-artifacts|windows-installers|windows-artifacts"
           merge-multiple: true
           path: release
 
-      - name: Generate SHA256SUMS (all zips)
+      - name: Generate SHA256SUMS (if any zips)
         run: |
           cd release
           if ls *.zip >/dev/null 2>&1; then
@@ -231,47 +249,29 @@ jobs:
 
       - name: Compose Release Notes
         run: |
-          VERSION="${GITHUB_REF_NAME#refs/tags/}"; VERSION="${VERSION#v}"
+          V="${GITHUB_REF_NAME#refs/tags/}"; V="${V#v}"
           cat > RELEASE_BODY.md <<'EOF'
-          # Branching Novel Tools — Release __VERSION__
+          # Branching Novel Tools — Release __V__
 
-          ## Windows (Recommended)
-          - Editor (Installer): `BranchingNovelEditor-Online-Setup.exe`
-          - Viewer (Installer): `BranchingNovelGUI-Online-Setup.exe`
+          ## Windows (installers)
+          - Editor: `BranchingNovelEditor-Online-Setup.exe`
+          - Viewer: `BranchingNovelGUI-Online-Setup.exe`
 
           ## Portable Zips
-          - Windows:
-            - `BranchingNovelEditor-__VERSION__-windows-x64.zip`
-            - `BranchingNovelGUI-__VERSION__-windows-x64.zip`
-          - macOS:
-            - `BranchingNovelEditor-__VERSION__-macos.zip`
-            - `BranchingNovelGUI-__VERSION__-macos.zip`
-          - Linux:
-            - `branching-novel-editor-__VERSION__-linux-x64.zip`
-            - `branching-novel-gui-__VERSION__-linux-x64.zip`
+          - Windows: `BranchingNovelEditor-__V__-windows-x64.zip`, `BranchingNovelGUI-__V__-windows-x64.zip`
+          - macOS:   `BranchingNovelEditor-__V__-macos.zip`, `BranchingNovelGUI-__V__-macos.zip`
+          - Linux:   `branching-novel-editor-__V__-linux-x64.zip`, `branching-novel-gui-__V__-linux-x64.zip`
 
-          ## Online Installers (how they work)
-          - Each installer downloads `latest-*.zip` from the latest release:
-            - Editor: `releases/latest/download/latest-editor.zip` (+ `.sha256`)
-            - Viewer: `releases/latest/download/latest-viewer.zip` (+ `.sha256`)
-          - To update users, publish a new release; URLs stay constant.
-
-          ## macOS
-          - First launch may require right-click → Open.
-          - Or: `xattr -dr com.apple.quarantine ./<binary>`
-
-          ## Linux
-          - `chmod +x ./<binary>` before running if needed.
+          ## Online installers fetch from the latest release:
+          - Editor: `releases/latest/download/latest-editor.zip` (+ `.sha256`)
+          - Viewer: `releases/latest/download/latest-viewer.zip` (+ `.sha256`)
 
           ## Checksums
           See `SHA256SUMS.txt`.
-
-          ## License
-          MIT.
           EOF
-          sed -i "s/__VERSION__/${VERSION}/g" RELEASE_BODY.md
+          sed -i "s/__V__/${V}/g" RELEASE_BODY.md
 
-      - name: Create GitHub Release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
