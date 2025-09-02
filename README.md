@@ -7,6 +7,7 @@ Files typically use the `.bnov` extension and are encoded in UTF-8.
 - `@title: <title>` – story title (`Untitled` if omitted).
 - `@start: <branch_id>` – starting branch id (defaults to the first branch).
 - `@ending: <text>` – message shown when the story ends with no choices (`The End` by default).
+- `@show-disabled: true` – display unavailable choices as disabled buttons.
 - `! <var> = <value>` – define an initial variable before any chapter.
 
 ## Chapters and branches
@@ -58,4 +59,5 @@ You wake up in a dark room.
 ```
 python branching_novel.py path/to/story.bnov
 ```
-Pass `--show-disabled` to display unavailable choices as disabled buttons.
+Include `@show-disabled: true` in the story file or pass `--show-disabled` to
+display unavailable choices as disabled buttons.
