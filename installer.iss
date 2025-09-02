@@ -1,0 +1,132 @@
+; installer.iss - Online Bootstrap Installer (공용)
+
+#ifndef MyAppName
+  #define MyAppName "MyApp"
+#endif
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0"
+#endif
+#ifndef MyAppExe
+  #define MyAppExe "MyApp.exe"
+#endif
+#ifndef PayloadZipURL
+  #define PayloadZipURL "https://example.com/latest.zip"
+#endif
+#ifndef PayloadShaURL
+  #define PayloadShaURL "https://example.com/latest.sha256"
+#endif
+
+[Setup]
+AppId={{B1C50C47-7B73-4308-9C74-2A9B3E11A9D3}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+DefaultDirName={autopf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
+Compression=lzma2
+SolidCompression=yes
+OutputBaseFilename={#MyAppName}-Online-Setup
+WizardStyle=modern
+ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64 ia32
+PrivilegesRequired=admin
+UninstallDisplayIcon={app}\{#MyAppExe}
+SetupLogging=yes
+
+[Languages]
+Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "바탕화면에 바로가기 만들기"; GroupDescription: "추가 작업:"; Flags: unchecked
+
+[Icons]
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
+Name: "{group}\프로그램 제거"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\{#MyAppExe}"; Description: "{#MyAppName} 실행"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function IsPSAvailable(): Boolean;
+var ResultCode: Integer;
+begin
+  Result := Exec('powershell.exe', '-NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.Major"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+function RunPS(const Cmd: String): Boolean;
+var ResultCode: Integer; PSArgs: String;
+begin
+  PSArgs := '-NoLogo -NoProfile -ExecutionPolicy Bypass -Command ' + AddQuotes(Cmd);
+  Result := Exec('powershell.exe', PSArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if not Result then
+    MsgBox('PowerShell 실행 실패. 코드: ' + IntToStr(ResultCode), mbError, MB_OK);
+end;
+
+function DownloadAndVerify(const UrlZip, UrlSha, DestZip, DestSha: String): Boolean;
+var Cmd: String;
+begin
+  Cmd :=
+    '$ErrorActionPreference="Stop";' +
+    '[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;' +
+    'Invoke-WebRequest -UseBasicParsing ' + AddQuotes(UrlZip) + ' -OutFile ' + AddQuotes(DestZip) + ';' +
+    'Invoke-WebRequest -UseBasicParsing ' + AddQuotes(UrlSha) + ' -OutFile ' + AddQuotes(DestSha) + ';';
+  if not RunPS(Cmd) then begin Result := False; exit; end;
+
+  Cmd :=
+    '$ErrorActionPreference="Stop";' +
+    '$expected=(Get-Content ' + AddQuotes(DestSha) + ' | Select-Object -First 1).Split(" ",[System.StringSplitOptions]::RemoveEmptyEntries)[0];' +
+    '$actual=(Get-FileHash ' + AddQuotes(DestZip) + ' -Algorithm SHA256).Hash.ToLower();' +
+    'if($expected.ToLower() -ne $actual){Write-Error "해시 불일치. expected=$expected actual=$actual"}';
+  if not RunPS(Cmd) then begin Result := False; exit; end;
+  Result := True;
+end;
+
+function ExpandZipToApp(const ZipPath, TargetDir: String): Boolean;
+var Cmd: String;
+begin
+  Cmd :=
+    '$ErrorActionPreference="Stop";' +
+    'if(-not(Test-Path ' + AddQuotes(TargetDir) + ')){New-Item -ItemType Directory -Path ' + AddQuotes(TargetDir) + ' | Out-Null};' +
+    'try{Expand-Archive -LiteralPath ' + AddQuotes(ZipPath) + ' -DestinationPath ' + AddQuotes(TargetDir) + ' -Force} ' +
+    'catch{Add-Type -AssemblyName System.IO.Compression.FileSystem;[System.IO.Compression.ZipFile]::ExtractToDirectory(' +
+      AddQuotes(ZipPath) + ',' + AddQuotes(TargetDir) + ')}';
+  Result := RunPS(Cmd);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var ZipPath, ShaPath: String; Ok: Boolean;
+begin
+  if CurStep = ssInstall then
+  begin
+    if not IsPSAvailable() then
+    begin
+      MsgBox('PowerShell을 찾을 수 없습니다. Windows 10/11에서 실행해 주세요.', mbError, MB_OK);
+      WizardForm.Close; exit;
+    end;
+
+    ZipPath := ExpandConstant('{tmp}\payload.zip');
+    ShaPath := ExpandConstant('{tmp}\payload.sha256');
+
+    WizardForm.StatusLabel.Caption := '다운로드 중...';
+    WizardForm.ProgressGauge.Style := npbstMarquee;
+
+    Ok := DownloadAndVerify('{#PayloadZipURL}', '{#PayloadShaURL}', ZipPath, ShaPath);
+    if not Ok then
+    begin
+      WizardForm.ProgressGauge.Style := npbstNormal;
+      MsgBox('다운로드 또는 무결성 검증 실패. 네트워크 상태나 URL을 확인해 주세요.', mbError, MB_OK);
+      WizardForm.Close; exit;
+    end;
+
+    WizardForm.StatusLabel.Caption := '압축 해제 중...';
+    Ok := ExpandZipToApp(ZipPath, ExpandConstant('{app}'));
+    WizardForm.ProgressGauge.Style := npbstNormal;
+
+    if not Ok then
+    begin
+      MsgBox('압축 해제에 실패했습니다.', mbError, MB_OK);
+      WizardForm.Close; exit;
+    end;
+  end;
+end;
