@@ -71,6 +71,9 @@ class Story:
     chapters: Dict[str, Chapter] = field(default_factory=dict)
     variables: Dict[str, Union[int, float, bool]] = field(default_factory=dict)
 
+    def get_chapter(self, cid: str) -> Optional[Chapter]:
+        return self.chapters.get(cid)
+
     def chapter_ids(self) -> List[str]:
         return list(self.chapters.keys())
 
