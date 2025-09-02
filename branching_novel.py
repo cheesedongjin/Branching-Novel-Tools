@@ -427,6 +427,8 @@ class BranchingNovelApp(tk.Tk):
         ttk.Label(left_frame, text="Chapters", font=("Segoe UI", 11, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 6))
         self.chapter_list = tk.Listbox(left_frame, exportselection=False, height=25)
         self.chapter_list.grid(row=1, column=0, sticky="nsw")
+        # 사용자 클릭/포커스 방지
+        self.chapter_list.configure(state="disabled", takefocus=0)
         self._populate_chapter_list()
 
         # 우측: 상단 네비게이션 바
@@ -450,7 +452,10 @@ class BranchingNovelApp(tk.Tk):
 
         self.btn_home = ttk.Button(btn_frame, text="처음부터", command=self._confirm_reset)
         self.btn_home.grid(row=0, column=0, padx=4)
-        ttk.Label(btn_frame, text="← →").grid(row=0, column=1, padx=4)
+        self.btn_prev = ttk.Button(btn_frame, text="←", command=self._go_prev_chapter)
+        self.btn_prev.grid(row=0, column=1, padx=4)
+        self.btn_next = ttk.Button(btn_frame, text="→", command=self._go_next_chapter)
+        self.btn_next.grid(row=0, column=2, padx=4)
 
         # 본문 표시
         text_frame = ttk.Frame(right_frame)
@@ -480,11 +485,14 @@ class BranchingNovelApp(tk.Tk):
         self.bind("<Right>", self._go_next_chapter)
 
     def _populate_chapter_list(self):
+        # 리스트 업데이트 시 일시적으로 활성화
+        self.chapter_list.configure(state="normal")
         self.chapter_list.delete(0, tk.END)
         for cid in self.visited_chapters:
             ch = self.story.get_chapter(cid)
             title = ch.title if ch and ch.title else cid
             self.chapter_list.insert(tk.END, f"{cid}  |  {title}")
+        self.chapter_list.configure(state="disabled")
 
     def _go_prev_chapter(self, event=None):
         if self.chapter_page_index > 0:
@@ -585,6 +593,7 @@ class BranchingNovelApp(tk.Tk):
         cur_branch = self.story.get_branch(self.history[start].branch_id)
         if cur_branch:
             self._select_chapter_in_list(cur_branch.chapter_id)
+        self._update_nav_buttons()
 
     def _render_current(self):
         if not self.history:
@@ -656,7 +665,16 @@ class BranchingNovelApp(tk.Tk):
         self._render_current()
 
     def _update_nav_buttons(self):
-        pass
+        # 현재 페이지 위치에 따라 네비게이션 버튼 상태 업데이트
+        if self.chapter_page_index <= 0:
+            self.btn_prev.state(["disabled"])
+        else:
+            self.btn_prev.state(["!disabled"])
+
+        if self.chapter_page_index >= len(self.chapter_positions) - 1:
+            self.btn_next.state(["disabled"])
+        else:
+            self.btn_next.state(["!disabled"])
 
     def _update_path_label(self):
         # 경로를 간단히 요약하여 표시: id(선택) -> id(선택) ...
@@ -672,6 +690,8 @@ class BranchingNovelApp(tk.Tk):
 
     def _select_chapter_in_list(self, cid: str):
         # 리스트에서 해당 id가 있는 항목 선택
+        state = self.chapter_list.cget("state")
+        self.chapter_list.configure(state="normal")
         for i in range(self.chapter_list.size()):
             item = self.chapter_list.get(i)
             item_cid = item.split("|", 1)[0].strip()
@@ -680,6 +700,7 @@ class BranchingNovelApp(tk.Tk):
                 self.chapter_list.selection_set(i)
                 self.chapter_list.see(i)
                 break
+        self.chapter_list.configure(state=state)
 
     def _compute_state(self, upto_index: int) -> Dict[str, Union[int, float, bool]]:
         state: Dict[str, Union[int, float, bool]] = dict(self.story.variables)
