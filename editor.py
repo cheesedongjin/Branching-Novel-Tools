@@ -1300,103 +1300,16 @@ class ChapterEditor(tk.Tk):
         self.txt_preview.config(state="disabled")
 
     def _run_preview(self):
-        """현재 스토리를 간단히 실행해 볼 수 있는 팝업을 띄운다."""
+        """main.py의 실행기를 이용하여 현재 스토리를 실행한다."""
         self._apply_body_to_model()
 
-        state: Dict[str, Union[int, float, bool]] = {}
-        current: Optional[Chapter] = None
+        import copy
+        from main import BranchingNovelApp
 
-        def apply_actions(ch: Chapter):
-            for act in ch.actions:
-                cur = state.get(act.var, 0)
-                if isinstance(cur, bool):
-                    cur = int(cur)
-                val = act.value
-                if isinstance(val, bool):
-                    val = int(val)
-                if act.op == "set":
-                    state[act.var] = val
-                elif act.op == "add":
-                    state[act.var] = cur + val
-                elif act.op == "sub":
-                    state[act.var] = cur - val
-                elif act.op == "mul":
-                    state[act.var] = cur * val
-                elif act.op == "div":
-                    state[act.var] = cur / val
-                elif act.op == "floordiv":
-                    state[act.var] = cur // val
-                elif act.op == "mod":
-                    state[act.var] = cur % val
-                elif act.op == "pow":
-                    state[act.var] = cur ** val
-
-        def eval_cond(cond: str) -> bool:
-            expr = re.sub(r"\btrue\b", "True", cond, flags=re.IGNORECASE)
-            expr = re.sub(r"\bfalse\b", "False", expr, flags=re.IGNORECASE)
-
-            class Env(dict):
-                def __missing__(self, key):
-                    return 0
-
-            env = Env()
-            env.update(state)
-            try:
-                return bool(eval(expr, {"__builtins__": None}, env))
-            except Exception:
-                return False
-
-        win = tk.Toplevel(self)
-        win.title("Runtime Preview")
-        win.geometry("600x400")
-
-        text = tk.Text(win, wrap="word", state="disabled")
-        text.pack(fill="both", expand=True, padx=8, pady=8)
-
-        btn_frame = ttk.Frame(win)
-        btn_frame.pack(fill="x", padx=8, pady=(0,8))
-
-        def show(cid: str):
-            nonlocal current
-            ch = self.story.chapters.get(cid)
-            if not ch:
-                messagebox.showerror("오류", f"챕터를 찾을 수 없습니다: {cid}", parent=win)
-                win.destroy()
-                return
-            current = ch
-            apply_actions(ch)
-            text.config(state="normal")
-            text.delete("1.0", tk.END)
-            for p in ch.paragraphs:
-                text.insert(tk.END, p + "\n\n")
-            text.config(state="disabled")
-
-            for child in btn_frame.winfo_children():
-                child.destroy()
-
-            display = []
-            for c in ch.choices:
-                ok = True
-                if c.condition:
-                    ok = eval_cond(c.condition)
-                if ok:
-                    display.append(c)
-
-            if display:
-                for c in display:
-                    ttk.Button(btn_frame, text=c.text, command=lambda c=c: choose(c)).pack(fill="x", pady=2)
-            else:
-                ttk.Button(btn_frame, text="닫기", command=win.destroy).pack(pady=2)
-
-        def choose(choice: Choice):
-            show(choice.target_id)
-
-        start = self.story.start_id or next(iter(self.story.chapters.keys()), None)
-        if not start:
-            messagebox.showerror("오류", "챕터가 없습니다.", parent=win)
-            win.destroy()
-            return
-        show(start)
+        preview_story = copy.deepcopy(self.story)
+        file_path = self.current_file or "<preview>"
+        app = BranchingNovelApp(preview_story, file_path)
+        app.mainloop()
 
     def _validate_story(self):
         errors = []
