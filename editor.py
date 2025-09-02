@@ -384,13 +384,13 @@ class ConditionRowDialog(tk.Toplevel):
 
 
 class VariableDialog(tk.Toplevel):
-    def __init__(self, master):
+    def __init__(self, master, name: str = "", value: Optional[Union[int, float, bool]] = None):
         super().__init__(master)
-        self.title("변수 추가")
+        self.title("변수 추가" if not name else "변수 편집")
         self.resizable(False, False)
         self.result_ok = False
-        self.var_name: str = ""
-        self.value: Union[int, float, bool] = 0
+        self.var_name: str = name
+        self.value: Union[int, float, bool] = value if value is not None else 0
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
@@ -398,10 +398,14 @@ class VariableDialog(tk.Toplevel):
         ttk.Label(frm, text="변수명").grid(row=0, column=0, sticky="w")
         self.ent_name = ttk.Entry(frm, width=20)
         self.ent_name.grid(row=1, column=0, sticky="ew", pady=(0,8))
+        if name:
+            self.ent_name.insert(0, name)
 
         ttk.Label(frm, text="초기값").grid(row=0, column=1, sticky="w", padx=(8,0))
         self.ent_val = ttk.Entry(frm, width=10)
         self.ent_val.grid(row=1, column=1, sticky="ew", padx=(8,0))
+        if value is not None:
+            self.ent_val.insert(0, str(value).lower() if isinstance(value, bool) else str(value))
 
         btns = ttk.Frame(frm)
         btns.grid(row=2, column=0, columnspan=2, sticky="e", pady=(10,0))
@@ -540,6 +544,7 @@ class ConditionDialog(tk.Toplevel):
                 self.variables.append(dlg.var_name)
             editor = self.master.master
             editor._set_dirty(True)
+            editor._refresh_variable_list()
             editor._update_preview()
 
     def _ok(self):
@@ -731,6 +736,24 @@ class ChapterEditor(tk.Tk):
         self.ent_end.grid(row=2, column=1, sticky="ew")
         self.ent_end.insert(0, self.story.ending_text)
         self.ent_end.bind("<KeyRelease>", lambda e: self._on_ending_changed())
+
+        # 변수 목록
+        var_frame = ttk.LabelFrame(left, text="변수 목록", padding=8)
+        var_frame.grid(row=1, column=0, sticky="ew", pady=(8,0))
+        var_frame.columnconfigure(0, weight=1)
+
+        btns = ttk.Frame(var_frame)
+        btns.grid(row=0, column=0, sticky="ew", pady=(0,6))
+        ttk.Button(btns, text="추가", command=self._add_variable).pack(side="left")
+        ttk.Button(btns, text="편집", command=self._edit_variable).pack(side="left", padx=(6,0))
+        ttk.Button(btns, text="삭제", command=self._delete_variable).pack(side="left", padx=(6,0))
+
+        self.tree_vars = ttk.Treeview(var_frame, columns=("var", "val"), show="headings", height=5)
+        self.tree_vars.heading("var", text="변수")
+        self.tree_vars.heading("val", text="값")
+        self.tree_vars.column("var", width=80, anchor="w")
+        self.tree_vars.column("val", width=80, anchor="w")
+        self.tree_vars.grid(row=1, column=0, sticky="ew")
 
         # 챕터 목록
         chap_frame = ttk.LabelFrame(left, text="챕터 목록", padding=8)
@@ -975,6 +998,7 @@ class ChapterEditor(tk.Tk):
             self.story.start_id = ids[0]
         self.ent_end.delete(0, tk.END)
         self.ent_end.insert(0, self.story.ending_text)
+        self._refresh_variable_list()
 
     def _add_chapter(self):
         # 현재 변경사항 반영
@@ -1036,6 +1060,53 @@ class ChapterEditor(tk.Tk):
             for act in ch.actions:
                 vars_set.add(act.var)
         return sorted(vars_set)
+
+    def _refresh_variable_list(self):
+        for i in self.tree_vars.get_children():
+            self.tree_vars.delete(i)
+        for name, val in self.story.variables.items():
+            val_str = str(val).lower() if isinstance(val, bool) else val
+            self.tree_vars.insert("", tk.END, values=(name, val_str))
+
+    def _add_variable(self):
+        dlg = VariableDialog(self)
+        if dlg.result_ok:
+            if dlg.var_name in self.story.variables:
+                messagebox.showerror("오류", "이미 존재하는 변수명입니다.")
+                return
+            self.story.variables[dlg.var_name] = dlg.value
+            self._refresh_variable_list()
+            self._set_dirty(True)
+            self._update_preview()
+
+    def _edit_variable(self):
+        sel = self.tree_vars.selection()
+        if not sel:
+            return
+        name = self.tree_vars.item(sel[0], "values")[0]
+        cur_val = self.story.variables.get(name)
+        dlg = VariableDialog(self, name, cur_val)
+        if dlg.result_ok:
+            if dlg.var_name != name and dlg.var_name in self.story.variables:
+                messagebox.showerror("오류", "이미 존재하는 변수명입니다.")
+                return
+            if dlg.var_name != name:
+                self.story.variables.pop(name, None)
+            self.story.variables[dlg.var_name] = dlg.value
+            self._refresh_variable_list()
+            self._set_dirty(True)
+            self._update_preview()
+
+    def _delete_variable(self):
+        sel = self.tree_vars.selection()
+        if not sel:
+            return
+        name = self.tree_vars.item(sel[0], "values")[0]
+        if messagebox.askyesno("삭제 확인", f"변수 '{name}'를 삭제하시겠습니까?"):
+            self.story.variables.pop(name, None)
+            self._refresh_variable_list()
+            self._set_dirty(True)
+            self._update_preview()
 
     def _add_choice(self):
         if self.current_chapter_id is None:
