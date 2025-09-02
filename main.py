@@ -134,7 +134,7 @@ class StoryParser:
 
     def parse(self, text: str) -> Story:
         text = text.lstrip("\ufeff")
-        lines = text.splitlines()
+        lines = [ln.lstrip("\ufeff") for ln in text.splitlines()]
         story = Story()
         current_chapter: Optional[Chapter] = None
         paragraph_buffer: List[str] = []
