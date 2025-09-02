@@ -2,31 +2,27 @@
 # -*- coding: utf-8 -*-
 """
 Branching Novel Editor (GUI)
-- 분기형 소설 문법을 직접 쓰지 않고 GUI로 작성하여 .bnov를 자동 생성
-- 기능:
-  * 작품 제목(@title), 시작 챕터(@start) 설정
-  * 챕터(분기) 추가/삭제/편집: id, 제목, 본문
-  * 챕터별 선택지(버튼) 추가/삭제/편집: 버튼 문구, 이동 타깃 챕터 id
-  * 챕터 ID 변경 시 해당 ID를 타깃으로 하는 선택지 자동 수정
-  * 파일 신규/열기/저장/다른 이름으로 저장
-  * 현재 상태를 문법에 맞는 텍스트로 미리보기
-  * 기존 포맷(.bnov) 불러오기(파싱)
 
-문법 포맷(생성 결과):
+이 에디터는 하나의 "챕터" 안에 여러 "분기"(branch)를 배치하는 최신 문법을
+완전히 지원합니다. 분기들은 기존 챕터와 동일한 역할을 하며, 챕터는 책의 한 장처럼
+여러 분기를 묶는 큰 단위입니다.
+
+문법 포맷:
   @title: 작품 제목
-  @start: 시작챕터ID
+  @start: 시작분기ID
 
-  # chapter_id: Chapter Title
+  @chapter chapter_id: Chapter Title
+  # branch_id: Branch Title
   본문 문단1
 
   본문 문단2
 
-  * 버튼 문구 -> target_id
-  * 버튼 문구2 -> target_id2
+  * 버튼 문구 -> target_branch_id
+  * 버튼 문구2 -> target_branch_id2
 
 주의:
-  - 챕터 id는 고유해야 함.
-  - 선택지 타깃은 존재하지 않는 챕터를 가리킬 수도 있으나, 저장 전 유효성 경고 제공.
+  - 챕터 id와 분기 id는 각각 전역에서 고유해야 함.
+  - 선택지 타깃은 존재하지 않는 분기를 가리킬 수도 있으나, 저장 전 유효성 경고 제공.
   - 본문은 에디터에서 빈 줄로 문단 구분.
 
 사용법:
@@ -56,28 +52,37 @@ class Action:
     value: Union[int, float, bool]
 
 @dataclass
-class Chapter:
-    chapter_id: str
+class Branch:
+    branch_id: str
     title: str
+    chapter_id: str
     paragraphs: List[str] = field(default_factory=list)
     choices: List[Choice] = field(default_factory=list)
     actions: List[Action] = field(default_factory=list)
 
+
+@dataclass
+class Chapter:
+    chapter_id: str
+    title: str
+    branches: Dict[str, Branch] = field(default_factory=dict)
+
 @dataclass
 class Story:
     title: str = "Untitled"
-    start_id: Optional[str] = None
+    start_id: Optional[str] = None  # 시작 분기 ID
     ending_text: str = "The End"
     chapters: Dict[str, Chapter] = field(default_factory=dict)
+    branches: Dict[str, Branch] = field(default_factory=dict)
     variables: Dict[str, Union[int, float, bool]] = field(default_factory=dict)
 
     def get_chapter(self, cid: str) -> Optional[Chapter]:
         return self.chapters.get(cid)
 
-    def chapter_ids(self) -> List[str]:
-        return list(self.chapters.keys())
+    def get_branch(self, bid: str) -> Optional[Branch]:
+        return self.branches.get(bid)
 
-    def ensure_unique_id(self, base: str = "chapter") -> str:
+    def ensure_unique_chapter_id(self, base: str = "chapter") -> str:
         i = 1
         cid = f"{base}"
         ids = set(self.chapters.keys())
@@ -89,56 +94,61 @@ class Story:
                 return cid
             i += 1
 
+    def ensure_unique_branch_id(self, base: str = "branch") -> str:
+        i = 1
+        bid = f"{base}"
+        ids = set(self.branches.keys())
+        if bid not in ids:
+            return bid
+        while True:
+            bid = f"{base}{i}"
+            if bid not in ids:
+                return bid
+            i += 1
+
     def serialize(self) -> str:
-        lines = []
-        # metadata
+        lines: List[str] = []
         lines.append(f"@title: {self.title}".rstrip())
         if self.start_id:
             lines.append(f"@start: {self.start_id}")
         lines.append(f"@ending: {self.ending_text}")
-        # global variables
         for var in sorted(self.variables.keys()):
             val = self.variables[var]
             val_str = str(val).lower() if isinstance(val, bool) else val
             lines.append(f"! {var} = {val_str}")
-        lines.append("")  # blank line
+        lines.append("")
 
-        # chapters in insertion order
         for cid, ch in self.chapters.items():
-            header = f"# {ch.chapter_id}: {ch.title}" if ch.title else f"# {ch.chapter_id}"
-            lines.append(header)
-            # paragraphs
-            for p in ch.paragraphs:
-                lines.append(p.rstrip())
-                lines.append("")  # blank line between paragraphs
-            # remove trailing blank if any paragraph exists
-            if len(ch.paragraphs) > 0 and len(lines) > 0 and lines[-1] == "":
-                pass
-            # actions
-            op_map = {
-                "add": "+=",
-                "sub": "-=",
-                "mul": "*=",
-                "div": "/=",
-                "floordiv": "//=",
-                "mod": "%=",
-                "pow": "**=",
-            }
-            for act in ch.actions:
-                if act.op == "set":
-                    lines.append(f"! {act.var} = {act.value}")
-                else:
-                    sym = op_map.get(act.op)
-                    if sym:
-                        lines.append(f"! {act.var} {sym} {act.value}")
-            # choices
-            for c in ch.choices:
-                if c.condition:
-                    lines.append(f"* [{c.condition}] {c.text} -> {c.target_id}")
-                else:
-                    lines.append(f"* {c.text} -> {c.target_id}")
-            lines.append("")  # blank line after chapter
-        # trim trailing blanks
+            chap_header = f"@chapter {ch.chapter_id}: {ch.title}" if ch.title else f"@chapter {ch.chapter_id}"
+            lines.append(chap_header)
+            for bid, br in ch.branches.items():
+                br_header = f"# {br.branch_id}: {br.title}" if br.title else f"# {br.branch_id}"
+                lines.append(br_header)
+                for p in br.paragraphs:
+                    lines.append(p.rstrip())
+                    lines.append("")
+                op_map = {
+                    "add": "+=",
+                    "sub": "-=",
+                    "mul": "*=",
+                    "div": "/=",
+                    "floordiv": "//=",
+                    "mod": "%=",
+                    "pow": "**=",
+                }
+                for act in br.actions:
+                    if act.op == "set":
+                        lines.append(f"! {act.var} = {act.value}")
+                    else:
+                        sym = op_map.get(act.op)
+                        if sym:
+                            lines.append(f"! {act.var} {sym} {act.value}")
+                for c in br.choices:
+                    if c.condition:
+                        lines.append(f"* [{c.condition}] {c.text} -> {c.target_id}")
+                    else:
+                        lines.append(f"* {c.text} -> {c.target_id}")
+                lines.append("")
         while lines and lines[-1] == "":
             lines.pop()
         return "\n".join(lines)
@@ -153,108 +163,132 @@ class StoryParser:
         text = text.lstrip("\ufeff")
         lines = [ln.lstrip("\ufeff") for ln in text.splitlines()]
         story = Story()
-        current: Optional[Chapter] = None
-        buffer: List[str] = []
+        current_chapter: Optional[Chapter] = None
+        current_branch: Optional[Branch] = None
+        paragraph_buffer: List[str] = []
 
-        # metadata first pass
+        # 메타데이터 처리
         for raw in lines:
-            s = raw.strip()
-            if s.startswith("@title:"):
-                story.title = s[len("@title:"):].strip() or "Untitled"
-            elif s.startswith("@start:"):
-                story.start_id = s[len("@start:"):].strip() or None
-            elif s.startswith("@ending:"):
-                story.ending_text = s[len("@ending:"):].strip() or "The End"
+            line = raw.strip()
+            if line.startswith("@title:"):
+                story.title = line[len("@title:"):].strip() or "Untitled"
+                continue
+            if line.startswith("@start:"):
+                story.start_id = line[len("@start:"):].strip() or None
+                continue
+            if line.startswith("@ending:"):
+                story.ending_text = line[len("@ending:"):].strip() or "The End"
+                continue
 
         i = 0
         while i < len(lines):
             raw = lines[i]
             line = raw.rstrip("\n")
-            s = line.strip()
+            stripped = line.strip()
             i += 1
 
-            if s.startswith("@"):
+            if stripped.startswith("@chapter"):
+                current_branch = None
+                current_chapter = self._parse_chapter_decl(stripped)
+                if current_chapter.chapter_id in story.chapters:
+                    raise ParseError(f"Duplicate chapter id: {current_chapter.chapter_id}")
+                story.chapters[current_chapter.chapter_id] = current_chapter
                 continue
 
-            if s.startswith("#"):
-                if current is not None and buffer:
-                    current.paragraphs.extend(self._flush_paragraphs(buffer))
-                    buffer.clear()
-                current = self._parse_header(s)
-                if current.chapter_id in story.chapters:
-                    raise ParseError(f"Duplicate chapter id: {current.chapter_id}")
-                story.chapters[current.chapter_id] = current
+            if stripped.startswith("#"):
+                if current_chapter is None:
+                    raise ParseError("Branch defined outside of a chapter.")
+                if current_branch is not None and paragraph_buffer:
+                    merged = self._merge_paragraph_buffer(paragraph_buffer)
+                    current_branch.paragraphs.extend(merged)
+                    paragraph_buffer.clear()
+                current_branch = self._parse_branch_header(stripped, current_chapter.chapter_id)
+                if current_branch.branch_id in story.branches:
+                    raise ParseError(f"Duplicate branch id: {current_branch.branch_id}")
+                story.branches[current_branch.branch_id] = current_branch
+                current_chapter.branches[current_branch.branch_id] = current_branch
                 continue
 
-            if s == "":
-                if current is not None and buffer:
-                    current.paragraphs.extend(self._flush_paragraphs(buffer))
-                    buffer.clear()
+            if stripped == "":
+                if current_branch is not None:
+                    merged = self._merge_paragraph_buffer(paragraph_buffer)
+                    current_branch.paragraphs.extend(merged)
+                    paragraph_buffer.clear()
                 continue
 
-            if s.startswith("!"):
-                act = self._parse_action(s)
-                if current is None:
-                    if act.op != "set":
-                        raise ParseError("Action outside of a chapter.")
-                    story.variables[act.var] = act.value
+            if stripped.startswith("!"):
+                action = self._parse_action_line(stripped)
+                if current_branch is None:
+                    if action.op != "set":
+                        raise ParseError("State change found outside of any branch.")
+                    story.variables[action.var] = action.value
                 else:
-                    current.actions.append(act)
+                    current_branch.actions.append(action)
                 continue
 
-            if s.startswith("* "):
-                if current is None:
-                    raise ParseError("Choice outside of a chapter.")
-                ch = self._parse_choice(s)
-                current.choices.append(ch)
+            if stripped.startswith("* "):
+                if current_branch is None:
+                    raise ParseError("Choice found outside of any branch.")
+                choice = self._parse_choice_line(stripped)
+                current_branch.choices.append(choice)
                 continue
 
-            if current is None:
-                raise ParseError("Narrative outside of a chapter.")
-            buffer.append(line)
+            if current_branch is None:
+                raise ParseError("Found narrative text outside of a branch. Add a branch header starting with '#'.")
+            paragraph_buffer.append(line)
 
-        if current is not None and buffer:
-            current.paragraphs.extend(self._flush_paragraphs(buffer))
-            buffer.clear()
+        if current_branch is not None and paragraph_buffer:
+            merged = self._merge_paragraph_buffer(paragraph_buffer)
+            current_branch.paragraphs.extend(merged)
+            paragraph_buffer.clear()
 
         if story.start_id is None:
-            # auto-pick first chapter if any
-            if story.chapters:
-                story.start_id = next(iter(story.chapters.keys()))
+            if story.branches:
+                story.start_id = next(iter(story.branches.keys()))
             else:
-                raise ParseError("No chapters.")
+                raise ParseError("No branches found in story.")
         return story
 
-    def _flush_paragraphs(self, buf: List[str]) -> List[str]:
-        if not buf:
+    def _merge_paragraph_buffer(self, buffer: List[str]) -> List[str]:
+        if not buffer:
             return []
-        paragraphs = []
-        cur = []
-        for ln in buf:
+        paragraphs: List[str] = []
+        current: List[str] = []
+        for ln in buffer:
             if ln.strip() == "":
-                if cur:
-                    paragraphs.append("\n".join(cur).strip())
-                    cur = []
+                if current:
+                    paragraphs.append("\n".join(current).strip())
+                    current = []
             else:
-                cur.append(ln)
-        if cur:
-            paragraphs.append("\n".join(cur).strip())
+                current.append(ln)
+        if current:
+            paragraphs.append("\n".join(current).strip())
         return paragraphs
 
-    def _parse_header(self, s: str) -> Chapter:
-        content = s.lstrip("#").strip()
+    def _parse_chapter_decl(self, line: str) -> Chapter:
+        content = line[len("@chapter"):].strip()
         if ":" in content:
             cid, title = content.split(":", 1)
             return Chapter(chapter_id=cid.strip(), title=title.strip())
         return Chapter(chapter_id=content.strip(), title=content.strip())
 
-    def _parse_choice(self, s: str) -> Choice:
-        body = s[2:].strip()
+    def _parse_branch_header(self, header_line: str, chapter_id: str) -> Branch:
+        content = header_line.lstrip("#").strip()
+        if ":" in content:
+            bid, title = content.split(":", 1)
+            return Branch(branch_id=bid.strip(), title=title.strip(), chapter_id=chapter_id)
+        else:
+            bid = content.strip()
+            return Branch(branch_id=bid, title=bid, chapter_id=chapter_id)
+
+    def _parse_choice_line(self, line: str) -> Choice:
+        body = line[2:].strip()
         if "->" not in body:
-            raise ParseError("Choice must contain '->'.")
+            raise ParseError("Choice line must contain '->'.")
         left, right = body.split("->", 1)
         left = left.strip()
         condition: Optional[str] = None
+        text: str
         if left.startswith("["):
             end = left.find("]")
             if end == -1:
@@ -265,11 +299,11 @@ class StoryParser:
             text = left
         target = right.strip()
         if not text or not target:
-            raise ParseError("Empty choice text or target.")
+            raise ParseError("Choice text or target is empty.")
         return Choice(text=text, target_id=target, condition=condition)
 
-    def _parse_action(self, s: str) -> Action:
-        content = s[1:].strip()
+    def _parse_action_line(self, line: str) -> Action:
+        content = line[1:].strip()
         if content.startswith("set "):
             rest = content[4:].strip()
             if "=" not in rest:
@@ -565,7 +599,7 @@ class ConditionDialog(tk.Toplevel):
 
 
 class ChoiceEditor(tk.Toplevel):
-    def __init__(self, master, title: str, choice: Optional[Choice], chapter_ids: List[str], variables: List[str]):
+    def __init__(self, master, title: str, choice: Optional[Choice], branch_ids: List[str], variables: List[str]):
         super().__init__(master)
         self.title(title)
         self.resizable(False, False)
@@ -580,8 +614,8 @@ class ChoiceEditor(tk.Toplevel):
         self.ent_text = ttk.Entry(frm, width=50)
         self.ent_text.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0,8))
 
-        ttk.Label(frm, text="이동 타깃 챕터 ID").grid(row=2, column=0, sticky="w")
-        self.cmb_target = ttk.Combobox(frm, values=chapter_ids, state="readonly", width=30)
+        ttk.Label(frm, text="이동 타깃 분기 ID").grid(row=2, column=0, sticky="w")
+        self.cmb_target = ttk.Combobox(frm, values=branch_ids, state="readonly", width=30)
         self.cmb_target.grid(row=3, column=0, sticky="w")
 
         ttk.Label(frm, text="조건/행동식").grid(row=4, column=0, sticky="w")
@@ -612,7 +646,7 @@ class ChoiceEditor(tk.Toplevel):
                 self.ent_cond.insert(0, choice.condition)
                 self.ent_cond.configure(state="readonly")
         else:
-            if chapter_ids:
+            if branch_ids:
                 self.cmb_target.current(0)
 
         self.bind("<Return>", lambda e: self._ok())
@@ -631,7 +665,7 @@ class ChoiceEditor(tk.Toplevel):
             messagebox.showerror("오류", "버튼 문구를 입력하세요.")
             return
         if not target:
-            messagebox.showerror("오류", "이동 타깃 챕터 ID를 선택하세요.")
+            messagebox.showerror("오류", "이동 타깃 분기 ID를 선택하세요.")
             return
         self.choice = Choice(text=text, target_id=target, condition=(cond or None))
         self.result_ok = True
@@ -658,12 +692,18 @@ class ChapterEditor(tk.Tk):
         self.minsize(1000, 700)
 
         self.story = Story()
-        # 초기 챕터 하나 생성
-        init_id = self.story.ensure_unique_id("intro")
-        self.story.chapters[init_id] = Chapter(chapter_id=init_id, title="Introduction", paragraphs=[], choices=[])
-        self.story.start_id = init_id
+        # 초기 챕터와 분기 생성
+        ch_id = self.story.ensure_unique_chapter_id("chapter")
+        chapter = Chapter(chapter_id=ch_id, title="Chapter 1")
+        self.story.chapters[ch_id] = chapter
+        br_id = self.story.ensure_unique_branch_id("intro")
+        branch = Branch(branch_id=br_id, title="Introduction", chapter_id=ch_id)
+        chapter.branches[br_id] = branch
+        self.story.branches[br_id] = branch
+        self.story.start_id = br_id
 
-        self.current_chapter_id: Optional[str] = init_id
+        self.current_chapter_id: Optional[str] = ch_id
+        self.current_branch_id: Optional[str] = br_id
         self.current_file: Optional[str] = None
         self.dirty: bool = False
 
@@ -678,7 +718,7 @@ class ChapterEditor(tk.Tk):
         self.find_results: List[Tuple[str, int]] = []
         self.find_index: int = -1
         self._last_find_text: str = ""
-        self._last_find_scope: str = "chapter"
+        self._last_find_scope: str = "branch"
 
         # 창 닫힘 이벤트에 종료 처리 연결
         self.protocol("WM_DELETE_WINDOW", self._exit_app)
@@ -724,6 +764,7 @@ class ChapterEditor(tk.Tk):
         left = ttk.Frame(root)
         left.grid(row=0, column=0, sticky="nsw", padx=(0,8))
         left.rowconfigure(2, weight=1)
+        left.rowconfigure(3, weight=1)
 
         # 작품 메타
         meta = ttk.LabelFrame(left, text="작품 정보", padding=8)
@@ -736,7 +777,7 @@ class ChapterEditor(tk.Tk):
         self.ent_title.insert(0, self.story.title)
         self.ent_title.bind("<KeyRelease>", lambda e: self._on_title_changed())
 
-        ttk.Label(meta, text="시작 챕터(@start)").grid(row=1, column=0, sticky="w")
+        ttk.Label(meta, text="시작 분기(@start)").grid(row=1, column=0, sticky="w")
         self.cmb_start = ttk.Combobox(meta, values=[], state="readonly")
         self.cmb_start.grid(row=1, column=1, sticky="ew")
         self.cmb_start.bind("<<ComboboxSelected>>", lambda e: self._on_start_changed())
@@ -783,6 +824,24 @@ class ChapterEditor(tk.Tk):
         ttk.Button(btns, text="위로", command=lambda: self._reorder_chapter(-1)).pack(side="left", padx=(6,0))
         ttk.Button(btns, text="아래로", command=lambda: self._reorder_chapter(1)).pack(side="left", padx=(6,0))
 
+        # 분기 목록
+        branch_frame = ttk.LabelFrame(left, text="분기 목록", padding=8)
+        branch_frame.grid(row=3, column=0, sticky="nsew", pady=(8,0))
+        branch_frame.rowconfigure(1, weight=1)
+        branch_frame.columnconfigure(0, weight=1)
+
+        self.lst_branches = tk.Listbox(branch_frame, height=15, exportselection=False)
+        self.lst_branches.grid(row=1, column=0, sticky="nsew")
+        self.lst_branches.bind("<<ListboxSelect>>", lambda e: self._on_select_branch())
+        self.lst_branches.bind("<Double-Button-1>", lambda e: self._on_select_branch())
+
+        bbtns = ttk.Frame(branch_frame)
+        bbtns.grid(row=0, column=0, sticky="ew", pady=(0,6))
+        ttk.Button(bbtns, text="추가", command=self._add_branch).pack(side="left")
+        ttk.Button(bbtns, text="삭제", command=self._delete_current_branch).pack(side="left", padx=(6,0))
+        ttk.Button(bbtns, text="위로", command=lambda: self._reorder_branch(-1)).pack(side="left", padx=(6,0))
+        ttk.Button(bbtns, text="아래로", command=lambda: self._reorder_branch(1)).pack(side="left", padx=(6,0))
+
         # 우측 편집/미리보기 영역
         right = ttk.Notebook(root)
         right.grid(row=0, column=1, sticky="nsew")
@@ -790,10 +849,10 @@ class ChapterEditor(tk.Tk):
 
         # 챕터 편집 탭
         edit_tab = ttk.Frame(right, padding=8)
-        right.add(edit_tab, text="챕터 편집")
+        right.add(edit_tab, text="분기 편집")
 
         edit_tab.columnconfigure(1, weight=1)
-        edit_tab.rowconfigure(3, weight=1)
+        edit_tab.rowconfigure(4, weight=1)
 
         ttk.Label(edit_tab, text="챕터 ID").grid(row=0, column=0, sticky="w")
         self.ent_ch_id = ttk.Entry(edit_tab)
@@ -807,9 +866,21 @@ class ChapterEditor(tk.Tk):
         self.ent_ch_title.bind("<FocusOut>", lambda e: self._apply_chapter_id_title())
         self.ent_ch_title.bind("<Return>", lambda e: self._apply_chapter_id_title())
 
+        ttk.Label(edit_tab, text="분기 ID").grid(row=2, column=0, sticky="w")
+        self.ent_br_id = ttk.Entry(edit_tab)
+        self.ent_br_id.grid(row=2, column=1, sticky="ew", pady=(0,6))
+        self.ent_br_id.bind("<FocusOut>", lambda e: self._apply_branch_id_title())
+        self.ent_br_id.bind("<Return>", lambda e: self._apply_branch_id_title())
+
+        ttk.Label(edit_tab, text="분기 제목").grid(row=3, column=0, sticky="w")
+        self.ent_br_title = ttk.Entry(edit_tab)
+        self.ent_br_title.grid(row=3, column=1, sticky="ew", pady=(0,6))
+        self.ent_br_title.bind("<FocusOut>", lambda e: self._apply_branch_id_title())
+        self.ent_br_title.bind("<Return>", lambda e: self._apply_branch_id_title())
+
         # 본문
         body_frame = ttk.LabelFrame(edit_tab, text="본문(빈 줄로 문단 구분)", padding=6)
-        body_frame.grid(row=3, column=0, columnspan=2, sticky="nsew")
+        body_frame.grid(row=4, column=0, columnspan=2, sticky="nsew")
         body_frame.rowconfigure(0, weight=1)
         body_frame.columnconfigure(0, weight=1)
 
@@ -823,12 +894,12 @@ class ChapterEditor(tk.Tk):
 
         # 선택지 편집
         choices_frame = ttk.LabelFrame(edit_tab, text="선택지(버튼)", padding=6)
-        choices_frame.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8,0))
+        choices_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(8,0))
         choices_frame.columnconfigure(0, weight=1)
 
         self.tree_choices = ttk.Treeview(choices_frame, columns=("text", "target"), show="headings", height=6)
         self.tree_choices.heading("text", text="버튼 문구")
-        self.tree_choices.heading("target", text="타깃 챕터 ID")
+        self.tree_choices.heading("target", text="타깃 분기 ID")
         self.tree_choices.column("text", width=400, anchor="w")
         self.tree_choices.column("target", width=160, anchor="w")
         self.tree_choices.grid(row=0, column=0, sticky="ew")
@@ -892,8 +963,19 @@ class ChapterEditor(tk.Tk):
         idx = sel[0]
         cid = list(self.story.chapters.keys())[idx]
         if self.current_chapter_id != cid:
-            self._apply_body_to_model()  # 기존 챕터 본문 반영
+            self._apply_body_to_model()
             self._load_chapter_to_form(cid)
+
+    def _on_select_branch(self):
+        sel = self.lst_branches.curselection()
+        if not sel or self.current_chapter_id is None:
+            return
+        idx = sel[0]
+        ch = self.story.chapters[self.current_chapter_id]
+        bid = list(ch.branches.keys())[idx]
+        if self.current_branch_id != bid:
+            self._apply_body_to_model()
+            self._load_branch_to_form(bid)
 
     def _on_body_modified(self, evt):
         # Text의 Modified 플래그를 수동 리셋
@@ -911,31 +993,41 @@ class ChapterEditor(tk.Tk):
         self.ent_ch_id.insert(0, ch.chapter_id)
         self.ent_ch_title.delete(0, tk.END)
         self.ent_ch_title.insert(0, ch.title)
+        self._refresh_branch_list()
+        first = next(iter(ch.branches.keys()), None)
+        if first:
+            self._load_branch_to_form(first)
+
+    def _load_branch_to_form(self, bid: str):
+        self.current_branch_id = bid
+        br = self.story.branches[bid]
+        self.ent_br_id.delete(0, tk.END)
+        self.ent_br_id.insert(0, br.branch_id)
+        self.ent_br_title.delete(0, tk.END)
+        self.ent_br_title.insert(0, br.title)
 
         self.txt_body.config(state="normal")
         self.txt_body.delete("1.0", tk.END)
-        # 문단을 빈 줄로 결합하여 편집
-        if ch.paragraphs:
-            joined = "\n\n".join(ch.paragraphs)
-            self.txt_body.insert(tk.END, joined)
+        if br.paragraphs:
+            self.txt_body.insert(tk.END, "\n\n".join(br.paragraphs))
         self.txt_body.edit_modified(False)
 
         for i in self.tree_choices.get_children():
             self.tree_choices.delete(i)
-        for c in ch.choices:
+        for c in br.choices:
             self.tree_choices.insert("", tk.END, values=(c.text, c.target_id))
 
         self._refresh_meta_panel()
         self._update_preview()
 
     def _apply_body_to_model(self):
-        if self.current_chapter_id is None:
+        if self.current_branch_id is None:
             return
-        ch = self.story.chapters[self.current_chapter_id]
+        br = self.story.branches[self.current_branch_id]
         raw = self.txt_body.get("1.0", tk.END).rstrip("\n")
         paras = [p.strip() for p in raw.split("\n\n")]
         paras = [p for p in paras if p != ""]
-        ch.paragraphs = paras
+        br.paragraphs = paras
 
     def _apply_chapter_id_title(self):
         if self.current_chapter_id is None:
@@ -946,43 +1038,56 @@ class ChapterEditor(tk.Tk):
             messagebox.showerror("오류", "챕터 ID는 비울 수 없습니다.")
             self.ent_ch_id.focus_set()
             return
-
-        # ID 변경 처리
         cur_id = self.current_chapter_id
-        reload_needed = False
         if new_id != cur_id:
             if new_id in self.story.chapters:
                 messagebox.showerror("오류", f"이미 존재하는 챕터 ID입니다: {new_id}")
                 self.ent_ch_id.delete(0, tk.END)
                 self.ent_ch_id.insert(0, cur_id)
                 return
-            # 키 교체
             ch_obj = self.story.chapters.pop(cur_id)
             ch_obj.chapter_id = new_id
             self.story.chapters[new_id] = ch_obj
+            for br in ch_obj.branches.values():
+                br.chapter_id = new_id
             self.current_chapter_id = new_id
+        self.story.chapters[new_id].title = new_title
+        self._refresh_chapter_list()
+        self._set_dirty(True)
+        self._update_preview()
 
-            # 다른 챕터들의 선택지 타깃에서 기존 ID를 사용 중인 경우 모두 새 ID로 변경
-            for ch in self.story.chapters.values():
-                for c in ch.choices:
+    def _apply_branch_id_title(self):
+        if self.current_branch_id is None:
+            return
+        new_id = self.ent_br_id.get().strip()
+        new_title = self.ent_br_title.get().strip()
+        if not new_id:
+            messagebox.showerror("오류", "분기 ID는 비울 수 없습니다.")
+            self.ent_br_id.focus_set()
+            return
+        cur_id = self.current_branch_id
+        if new_id != cur_id:
+            if new_id in self.story.branches:
+                messagebox.showerror("오류", f"이미 존재하는 분기 ID입니다: {new_id}")
+                self.ent_br_id.delete(0, tk.END)
+                self.ent_br_id.insert(0, cur_id)
+                return
+            br_obj = self.story.branches.pop(cur_id)
+            br_obj.branch_id = new_id
+            self.story.branches[new_id] = br_obj
+            ch = self.story.chapters[br_obj.chapter_id]
+            ch.branches.pop(cur_id)
+            ch.branches[new_id] = br_obj
+            for other in self.story.branches.values():
+                for c in other.choices:
                     if c.target_id == cur_id:
                         c.target_id = new_id
-
-            # 시작 챕터가 기존 ID를 가리키면 갱신
             if self.story.start_id == cur_id:
                 self.story.start_id = new_id
-
-            reload_needed = True
-
-        # 제목 반영
-        self.story.chapters[new_id].title = new_title
-
-        # 리스트/폼 갱신
-        self._refresh_chapter_list()
-        if reload_needed:
-            # 현재 챕터 폼을 다시 로드하여 변경된 선택지 타깃 반영
-            self._load_chapter_to_form(new_id)
-
+            self.current_branch_id = new_id
+        self.story.branches[new_id].title = new_title
+        self._refresh_branch_list()
+        self._refresh_meta_panel()
         self._set_dirty(True)
         self._update_preview()
 
@@ -990,16 +1095,29 @@ class ChapterEditor(tk.Tk):
         self.lst_chapters.delete(0, tk.END)
         for cid, ch in self.story.chapters.items():
             self.lst_chapters.insert(tk.END, f"{cid}  |  {ch.title}")
-        # 현재 선택 유지
         if self.current_chapter_id and self.current_chapter_id in self.story.chapters:
             idx = list(self.story.chapters.keys()).index(self.current_chapter_id)
             self.lst_chapters.selection_clear(0, tk.END)
             self.lst_chapters.selection_set(idx)
             self.lst_chapters.see(idx)
+        self._refresh_branch_list()
         self._refresh_meta_panel()
 
+    def _refresh_branch_list(self):
+        self.lst_branches.delete(0, tk.END)
+        if self.current_chapter_id is None:
+            return
+        ch = self.story.chapters[self.current_chapter_id]
+        for bid, br in ch.branches.items():
+            self.lst_branches.insert(tk.END, f"{bid}  |  {br.title}")
+        if self.current_branch_id and self.current_branch_id in ch.branches:
+            idx = list(ch.branches.keys()).index(self.current_branch_id)
+            self.lst_branches.selection_clear(0, tk.END)
+            self.lst_branches.selection_set(idx)
+            self.lst_branches.see(idx)
+
     def _refresh_meta_panel(self):
-        ids = list(self.story.chapters.keys())
+        ids = list(self.story.branches.keys())
         self.cmb_start["values"] = ids
         if self.story.start_id in ids:
             self.cmb_start.set(self.story.start_id)
@@ -1013,12 +1131,17 @@ class ChapterEditor(tk.Tk):
     def _add_chapter(self):
         # 현재 변경사항 반영
         self._apply_body_to_model()
-        base = "chapter"
-        new_id = self.story.ensure_unique_id(base)
-        self.story.chapters[new_id] = Chapter(chapter_id=new_id, title="New Chapter", paragraphs=[], choices=[])
-        self.current_chapter_id = new_id
+        new_cid = self.story.ensure_unique_chapter_id("chapter")
+        chapter = Chapter(chapter_id=new_cid, title="New Chapter")
+        self.story.chapters[new_cid] = chapter
+        new_bid = self.story.ensure_unique_branch_id("branch")
+        branch = Branch(branch_id=new_bid, title="New Branch", chapter_id=new_cid)
+        chapter.branches[new_bid] = branch
+        self.story.branches[new_bid] = branch
+        self.current_chapter_id = new_cid
+        self.current_branch_id = new_bid
         self._refresh_chapter_list()
-        self._load_chapter_to_form(new_id)
+        self._load_chapter_to_form(new_cid)
         self._set_dirty(True)
 
     def _delete_current_chapter(self):
@@ -1028,23 +1151,26 @@ class ChapterEditor(tk.Tk):
             messagebox.showwarning("경고", "최소 한 개의 챕터는 필요합니다.")
             return
         cid = self.current_chapter_id
+        ch = self.story.chapters[cid]
         if messagebox.askyesno("삭제 확인", f"챕터 '{cid}'를 삭제하시겠습니까?"):
-            # 시작 챕터였을 경우 다른 챕터로 옮김
-            keys = list(self.story.chapters.keys())
-            next_id = None
-            if len(keys) > 1:
-                for k in keys:
-                    if k != cid:
-                        next_id = k
-                        break
+            for bid in list(ch.branches.keys()):
+                self.story.branches.pop(bid, None)
+                if self.story.start_id == bid:
+                    self.story.start_id = None
             self.story.chapters.pop(cid)
-            # 참조 정리는 하지 않음. 유효성 검사 시 경고됨.
-            if self.story.start_id == cid:
-                self.story.start_id = next_id
-            self.current_chapter_id = next_id
+            keys = list(self.story.chapters.keys())
+            next_cid = keys[0] if keys else None
+            self.current_chapter_id = next_cid
+            if next_cid:
+                next_bid = next(iter(self.story.chapters[next_cid].branches.keys()), None)
+                self.current_branch_id = next_bid
+            else:
+                self.current_branch_id = None
+            if self.story.start_id is None and self.current_branch_id:
+                self.story.start_id = self.current_branch_id
             self._refresh_chapter_list()
-            if next_id:
-                self._load_chapter_to_form(next_id)
+            if self.current_chapter_id and self.current_branch_id:
+                self._load_chapter_to_form(self.current_chapter_id)
             self._set_dirty(True)
 
     def _reorder_chapter(self, delta: int):
@@ -1064,10 +1190,59 @@ class ChapterEditor(tk.Tk):
         self._refresh_chapter_list()
         self._set_dirty(True)
 
+    def _add_branch(self):
+        if self.current_chapter_id is None:
+            return
+        self._apply_body_to_model()
+        new_id = self.story.ensure_unique_branch_id("branch")
+        br = Branch(branch_id=new_id, title="New Branch", chapter_id=self.current_chapter_id)
+        self.story.branches[new_id] = br
+        self.story.chapters[self.current_chapter_id].branches[new_id] = br
+        self.current_branch_id = new_id
+        self._refresh_branch_list()
+        self._load_branch_to_form(new_id)
+        self._set_dirty(True)
+
+    def _delete_current_branch(self):
+        if self.current_branch_id is None or self.current_chapter_id is None:
+            return
+        ch = self.story.chapters[self.current_chapter_id]
+        if len(ch.branches) <= 1:
+            messagebox.showwarning("경고", "챕터에는 최소 한 개의 분기가 필요합니다.")
+            return
+        bid = self.current_branch_id
+        if messagebox.askyesno("삭제 확인", f"분기 '{bid}'를 삭제하시겠습니까?"):
+            ch.branches.pop(bid, None)
+            self.story.branches.pop(bid, None)
+            if self.story.start_id == bid:
+                self.story.start_id = next(iter(self.story.branches.keys()), None)
+            next_bid = next(iter(ch.branches.keys()))
+            self.current_branch_id = next_bid
+            self._refresh_branch_list()
+            self._load_branch_to_form(next_bid)
+            self._set_dirty(True)
+
+    def _reorder_branch(self, delta: int):
+        if self.current_branch_id is None or self.current_chapter_id is None:
+            return
+        ch = self.story.chapters[self.current_chapter_id]
+        keys = list(ch.branches.keys())
+        idx = keys.index(self.current_branch_id)
+        new_idx = idx + delta
+        if new_idx < 0 or new_idx >= len(keys):
+            return
+        reordered = {}
+        keys[idx], keys[new_idx] = keys[new_idx], keys[idx]
+        for k in keys:
+            reordered[k] = ch.branches[k]
+        ch.branches = reordered
+        self._refresh_branch_list()
+        self._set_dirty(True)
+
     def _collect_variables(self) -> List[str]:
         vars_set = set(self.story.variables.keys())
-        for ch in self.story.chapters.values():
-            for act in ch.actions:
+        for br in self.story.branches.values():
+            for act in br.actions:
                 vars_set.add(act.var)
         return sorted(vars_set)
 
@@ -1119,61 +1294,59 @@ class ChapterEditor(tk.Tk):
             self._update_preview()
 
     def _add_choice(self):
-        if self.current_chapter_id is None:
+        if self.current_branch_id is None:
             return
-        ids = list(self.story.chapters.keys())
+        ids = list(self.story.branches.keys())
         vars = self._collect_variables()
         dlg = ChoiceEditor(self, "선택지 추가", None, ids, vars)
         if dlg.result_ok and dlg.choice:
-            ch = self.story.chapters[self.current_chapter_id]
-            ch.choices.append(dlg.choice)
+            br = self.story.branches[self.current_branch_id]
+            br.choices.append(dlg.choice)
             self.tree_choices.insert("", tk.END, values=(dlg.choice.text, dlg.choice.target_id))
             self._set_dirty(True)
             self._update_preview()
 
     def _edit_choice(self):
         sel = self.tree_choices.selection()
-        if not sel:
+        if not sel or self.current_branch_id is None:
             return
         idx = self.tree_choices.index(sel[0])
-        ch = self.story.chapters[self.current_chapter_id]
-        cur = ch.choices[idx]
-        ids = list(self.story.chapters.keys())
+        br = self.story.branches[self.current_branch_id]
+        cur = br.choices[idx]
+        ids = list(self.story.branches.keys())
         vars = self._collect_variables()
         dlg = ChoiceEditor(self, "선택지 편집", cur, ids, vars)
         if dlg.result_ok and dlg.choice:
-            ch.choices[idx] = dlg.choice
+            br.choices[idx] = dlg.choice
             self.tree_choices.item(sel[0], values=(dlg.choice.text, dlg.choice.target_id))
             self._set_dirty(True)
             self._update_preview()
 
     def _delete_choice(self):
         sel = self.tree_choices.selection()
-        if not sel:
+        if not sel or self.current_branch_id is None:
             return
         idx = self.tree_choices.index(sel[0])
-        ch = self.story.chapters[self.current_chapter_id]
-        ch.choices.pop(idx)
+        br = self.story.branches[self.current_branch_id]
+        br.choices.pop(idx)
         self.tree_choices.delete(sel[0])
         self._set_dirty(True)
         self._update_preview()
 
     def _reorder_choice(self, delta: int):
         sel = self.tree_choices.selection()
-        if not sel:
+        if not sel or self.current_branch_id is None:
             return
         cur_idx = self.tree_choices.index(sel[0])
         new_idx = cur_idx + delta
-        ch = self.story.chapters[self.current_chapter_id]
-        if new_idx < 0 or new_idx >= len(ch.choices):
+        br = self.story.branches[self.current_branch_id]
+        if new_idx < 0 or new_idx >= len(br.choices):
             return
-        ch.choices[cur_idx], ch.choices[new_idx] = ch.choices[new_idx], ch.choices[cur_idx]
-        # 트리뷰 갱신
+        br.choices[cur_idx], br.choices[new_idx] = br.choices[new_idx], br.choices[cur_idx]
         for i in self.tree_choices.get_children():
             self.tree_choices.delete(i)
-        for c in ch.choices:
+        for c in br.choices:
             self.tree_choices.insert("", tk.END, values=(c.text, c.target_id))
-        # 선택 재설정
         self.tree_choices.selection_set(self.tree_choices.get_children()[new_idx])
         self._set_dirty(True)
         self._update_preview()
@@ -1195,8 +1368,8 @@ class ChapterEditor(tk.Tk):
 
         scope_frame = ttk.LabelFrame(win, text="찾기 범위", padding=6)
         scope_frame.grid(row=0, column=0, columnspan=2, sticky="w")
-        self.find_scope = tk.StringVar(value="chapter")
-        ttk.Radiobutton(scope_frame, text="이 분기", variable=self.find_scope, value="chapter").pack(side="left")
+        self.find_scope = tk.StringVar(value="branch")
+        ttk.Radiobutton(scope_frame, text="이 분기", variable=self.find_scope, value="branch").pack(side="left")
         ttk.Radiobutton(scope_frame, text="프로젝트 전체", variable=self.find_scope, value="project").pack(side="left", padx=10)
 
         ttk.Label(win, text="찾을 문자열").grid(row=1, column=0, sticky="w", pady=(10,0))
@@ -1229,19 +1402,19 @@ class ChapterEditor(tk.Tk):
     def _build_find_results(self, query: str, scope: str):
         self._apply_body_to_model()
         results: List[Tuple[str, int]] = []
-        if scope == "chapter" and self.current_chapter_id:
-            ch = self.story.chapters[self.current_chapter_id]
-            text = "\n\n".join(ch.paragraphs)
+        if scope == "chapter" and self.current_branch_id:
+            br = self.story.branches[self.current_branch_id]
+            text = "\n\n".join(br.paragraphs)
             idx = text.find(query)
             while idx != -1:
-                results.append((self.current_chapter_id, idx))
+                results.append((self.current_branch_id, idx))
                 idx = text.find(query, idx + len(query))
         else:
-            for cid, ch in self.story.chapters.items():
-                text = "\n\n".join(ch.paragraphs)
+            for bid, br in self.story.branches.items():
+                text = "\n\n".join(br.paragraphs)
                 idx = text.find(query)
                 while idx != -1:
-                    results.append((cid, idx))
+                    results.append((bid, idx))
                     idx = text.find(query, idx + len(query))
         self.find_results = results
         self.find_index = -1
@@ -1260,9 +1433,12 @@ class ChapterEditor(tk.Tk):
             messagebox.showinfo("찾기", "결과가 없습니다.")
             return
         self.find_index = (self.find_index + delta) % len(self.find_results)
-        cid, pos = self.find_results[self.find_index]
-        if cid != self.current_chapter_id:
-            self._load_chapter_to_form(cid)
+        bid, pos = self.find_results[self.find_index]
+        br = self.story.get_branch(bid)
+        if br and br.chapter_id != self.current_chapter_id:
+            self._load_chapter_to_form(br.chapter_id)
+        if bid != self.current_branch_id:
+            self._load_branch_to_form(bid)
         self.txt_body.tag_remove("find_highlight", "1.0", tk.END)
         start = f"1.0+{pos}c"
         end = f"{start}+{len(query)}c"
@@ -1283,9 +1459,12 @@ class ChapterEditor(tk.Tk):
             self._find_step(1)
             if self.find_index < 0 or not self.find_results:
                 return
-        cid, pos = self.find_results[self.find_index]
-        if cid != self.current_chapter_id:
-            self._load_chapter_to_form(cid)
+        bid, pos = self.find_results[self.find_index]
+        br = self.story.get_branch(bid)
+        if br and br.chapter_id != self.current_chapter_id:
+            self._load_chapter_to_form(br.chapter_id)
+        if bid != self.current_branch_id:
+            self._load_branch_to_form(bid)
         start = f"1.0+{pos}c"
         end = f"{start}+{len(query)}c"
         self.txt_body.delete(start, end)
@@ -1320,19 +1499,22 @@ class ChapterEditor(tk.Tk):
 
         if not self.story.title.strip():
             errors.append("작품 제목이 비어 있습니다.")
-        if not self.story.start_id or self.story.start_id not in self.story.chapters:
-            errors.append("시작 챕터(@start)가 유효하지 않습니다.")
+        if not self.story.start_id or self.story.start_id not in self.story.branches:
+            errors.append("시작 분기(@start)가 유효하지 않습니다.")
 
-        ids = set(self.story.chapters.keys())
-        for cid, ch in self.story.chapters.items():
-            if not ch.chapter_id.strip():
-                errors.append(f"챕터 ID가 비어 있습니다: 내부키={cid}")
-            if ch.chapter_id != cid:
-                errors.append(f"내부키와 챕터 ID가 불일치합니다: {cid} != {ch.chapter_id}")
-            # 선택지 타깃 유효성
-            for c in ch.choices:
+        ids = set(self.story.branches.keys())
+        for bid, br in self.story.branches.items():
+            if not br.branch_id.strip():
+                errors.append(f"분기 ID가 비어 있습니다: 내부키={bid}")
+            if br.branch_id != bid:
+                errors.append(f"내부키와 분기 ID가 불일치합니다: {bid} != {br.branch_id}")
+            for c in br.choices:
                 if c.target_id not in ids:
-                    warnings.append(f"[{cid}] 선택지 타깃 미존재: '{c.text}' -> {c.target_id}")
+                    warnings.append(f"[{bid}] 선택지 타깃 미존재: '{c.text}' -> {c.target_id}")
+
+        for cid, ch in self.story.chapters.items():
+            if not ch.branches:
+                warnings.append(f"챕터 '{cid}'에 분기가 없습니다.")
 
         msg = []
         if errors:
@@ -1354,15 +1536,21 @@ class ChapterEditor(tk.Tk):
         if not self._confirm_discard_changes():
             return
         self.story = Story()
-        intro_id = self.story.ensure_unique_id("intro")
-        self.story.chapters[intro_id] = Chapter(chapter_id=intro_id, title="Introduction", paragraphs=[], choices=[])
-        self.story.start_id = intro_id
-        self.current_chapter_id = intro_id
+        ch_id = self.story.ensure_unique_chapter_id("chapter")
+        chapter = Chapter(chapter_id=ch_id, title="Introduction")
+        self.story.chapters[ch_id] = chapter
+        br_id = self.story.ensure_unique_branch_id("intro")
+        branch = Branch(branch_id=br_id, title="Introduction", chapter_id=ch_id)
+        chapter.branches[br_id] = branch
+        self.story.branches[br_id] = branch
+        self.story.start_id = br_id
+        self.current_chapter_id = ch_id
+        self.current_branch_id = br_id
         self.current_file = None
         self.ent_title.delete(0, tk.END)
         self.ent_title.insert(0, self.story.title)
         self._refresh_chapter_list()
-        self._load_chapter_to_form(intro_id)
+        self._load_chapter_to_form(ch_id)
         self._refresh_meta_panel()
         self._update_preview()
         self._set_dirty(False)
@@ -1386,16 +1574,18 @@ class ChapterEditor(tk.Tk):
             return
 
         self.story = story
-        # dict 유지: 파서는 본문 순서대로 chapters 삽입하므로 그 순서 유지
-        self.current_chapter_id = story.start_id
+        self.current_branch_id = story.start_id
+        br = self.story.get_branch(self.current_branch_id) if self.current_branch_id else None
+        self.current_chapter_id = br.chapter_id if br else (next(iter(self.story.chapters.keys())) if self.story.chapters else None)
         self.current_file = path
 
         self.ent_title.delete(0, tk.END)
         self.ent_title.insert(0, self.story.title)
         self._refresh_chapter_list()
-        if self.current_chapter_id is None:
-            self.current_chapter_id = next(iter(self.story.chapters.keys()))
-        self._load_chapter_to_form(self.current_chapter_id)
+        if self.current_chapter_id:
+            self._load_chapter_to_form(self.current_chapter_id)
+            if self.current_branch_id:
+                self._load_branch_to_form(self.current_branch_id)
         self._refresh_meta_panel()
         self._update_preview()
         self._set_dirty(False)
