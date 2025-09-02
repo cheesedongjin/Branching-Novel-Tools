@@ -77,7 +77,11 @@ jobs:
         run: |
           $iconArgs = @()
           if (Test-Path 'assets/icons/app.ico') { $iconArgs += @('--icon','assets/icons/app.ico') }
-          pyinstaller --noconfirm --windowed -n $env:EDITOR_APPNAME @iconArgs $env:EDITOR_ENTRY
+          $ver='${{ steps.rtag.outputs.version }}'
+          $fv=($ver.Split('.') + '0' + '0' + '0')[0..3] -join ','
+          ((Get-Content 'version-file-template.txt') -replace 'APP_NAME', $env:EDITOR_APPNAME -replace 'APP_VERSION', $ver -replace 'FILE_VERSION_COMMAS', $fv) |
+            Set-Content 'verinfo-editor.txt' -Encoding UTF8
+          pyinstaller --noconfirm --windowed --onedir --noupx --clean --version-file verinfo-editor.txt -n $env:EDITOR_APPNAME @iconArgs $env:EDITOR_ENTRY
           if (!(Test-Path "dist/$env:EDITOR_APPNAME")) { Write-Error "Editor dist missing"; exit 1 }
 
       - name: Build Viewer (folder mode)
@@ -85,7 +89,11 @@ jobs:
         run: |
           $iconArgs = @()
           if (Test-Path 'assets/icons/app.ico') { $iconArgs += @('--icon','assets/icons/app.ico') }
-          pyinstaller --noconfirm --windowed -n $env:VIEWER_APPNAME @iconArgs $env:VIEWER_ENTRY
+          $ver='${{ steps.rtag.outputs.version }}'
+          $fv=($ver.Split('.') + '0' + '0' + '0')[0..3] -join ','
+          ((Get-Content 'version-file-template.txt') -replace 'APP_NAME', $env:VIEWER_APPNAME -replace 'APP_VERSION', $ver -replace 'FILE_VERSION_COMMAS', $fv) |
+            Set-Content 'verinfo-viewer.txt' -Encoding UTF8
+          pyinstaller --noconfirm --windowed --onedir --noupx --clean --version-file verinfo-viewer.txt -n $env:VIEWER_APPNAME @iconArgs $env:VIEWER_ENTRY
           if (!(Test-Path "dist/$env:VIEWER_APPNAME")) { Write-Error "Viewer dist missing"; exit 1 }
 
       - name: Package ZIPs + latest.* for online installers
@@ -96,15 +104,19 @@ jobs:
 
           $ezip = "release/${env:EDITOR_APPNAME}-$ver-windows-x64.zip"
           Compress-Archive -Path "dist/${env:EDITOR_APPNAME}/*" -DestinationPath $ezip
+          if (!(Test-Path $ezip)) { Write-Error "Editor zip missing"; exit 1 }
           Copy-Item $ezip "release/latest-editor.zip" -Force
           $eh = (Get-FileHash "release/latest-editor.zip" -Algorithm SHA256).Hash.ToLower()
           "$eh  latest-editor.zip" | Out-File -Encoding ascii "release/latest-editor.sha256"
+          if (!(Test-Path "release/latest-editor.sha256")) { Write-Error "latest-editor.sha256 missing"; exit 1 }
 
           $vzip = "release/${env:VIEWER_APPNAME}-$ver-windows-x64.zip"
           Compress-Archive -Path "dist/${env:VIEWER_APPNAME}/*" -DestinationPath $vzip
+          if (!(Test-Path $vzip)) { Write-Error "Viewer zip missing"; exit 1 }
           Copy-Item $vzip "release/latest-viewer.zip" -Force
           $vh = (Get-FileHash "release/latest-viewer.zip" -Algorithm SHA256).Hash.ToLower()
           "$vh  latest-viewer.zip" | Out-File -Encoding ascii "release/latest-viewer.sha256"
+          if (!(Test-Path "release/latest-viewer.sha256")) { Write-Error "latest-viewer.sha256 missing"; exit 1 }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -143,7 +155,7 @@ jobs:
 
       - name: Compile Editor Installer
         shell: pwsh
-        if: ${{ hashFiles('release/latest-editor.zip') != '' && hashFiles('installer.iss') != '' }}
+        if: ${{ hashFiles('release/latest-editor.zip') != '' && hashFiles('release/latest-editor.sha256') != '' && hashFiles('installer.iss') != '' }}
         run: |
           $ownerRepo = "${env:GITHUB_REPOSITORY}"
           $version='${{ steps.rtag.outputs.version }}'
@@ -151,18 +163,22 @@ jobs:
           $shaURL = "https://github.com/$ownerRepo/releases/latest/download/latest-editor.sha256"
           iscc /DMyAppName="${env:EDITOR_APPNAME}" /DMyAppVersion="$version" /DMyAppExe="${env:EDITOR_EXE}" /DPayloadZipURL="$zipURL" /DPayloadShaURL="$shaURL" installer.iss
           New-Item -ItemType Directory -Force -Path release | Out-Null
-          Copy-Item ".\Output\${env:EDITOR_APPNAME}-Online-Setup.exe" "release/${env:EDITOR_APPNAME}-Online-Setup.exe" -Force
+          $outExe=".\Output\${env:EDITOR_APPNAME}-Online-Setup.exe"
+          if (!(Test-Path $outExe)) { Write-Error "Editor installer missing"; exit 1 }
+          Copy-Item $outExe "release/${env:EDITOR_APPNAME}-Online-Setup.exe" -Force
 
       - name: Compile Viewer Installer
         shell: pwsh
-        if: ${{ hashFiles('release/latest-viewer.zip') != '' && hashFiles('installer.iss') != '' }}
+        if: ${{ hashFiles('release/latest-viewer.zip') != '' && hashFiles('release/latest-viewer.sha256') != '' && hashFiles('installer.iss') != '' }}
         run: |
           $ownerRepo = "${env:GITHUB_REPOSITORY}"
           $version='${{ steps.rtag.outputs.version }}'
           $zipURL = "https://github.com/$ownerRepo/releases/latest/download/latest-viewer.zip"
           $shaURL = "https://github.com/$ownerRepo/releases/latest/download/latest-viewer.sha256"
           iscc /DMyAppName="${env:VIEWER_APPNAME}" /DMyAppVersion="$version" /DMyAppExe="${env:VIEWER_EXE}" /DPayloadZipURL="$zipURL" /DPayloadShaURL="$shaURL" installer.iss
-          Copy-Item ".\Output\${env:VIEWER_APPNAME}-Online-Setup.exe" "release/${env:VIEWER_APPNAME}-Online-Setup.exe" -Force
+          $outExe=".\Output\${env:VIEWER_APPNAME}-Online-Setup.exe"
+          if (!(Test-Path $outExe)) { Write-Error "Viewer installer missing"; exit 1 }
+          Copy-Item $outExe "release/${env:VIEWER_APPNAME}-Online-Setup.exe" -Force
 
       - name: Upload installers
         if: always()
