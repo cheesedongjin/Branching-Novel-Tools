@@ -706,13 +706,54 @@ class BranchingNovelApp(tk.Tk):
         expr = re.sub(r"\btrue\b", "True", expr, flags=re.IGNORECASE)
         expr = re.sub(r"\bfalse\b", "False", expr, flags=re.IGNORECASE)
         try:
-            tree = ast.parse(expr, mode="eval")
-            return bool(self._eval_ast(tree.body))
+            tree = ast.parse(expr, mode="exec")
+            result = self._eval_ast(tree)
+            return bool(result)
         except Exception:
             return False
 
     def _eval_ast(self, node: ast.AST) -> Any:
-        if isinstance(node, ast.BoolOp):
+        if isinstance(node, ast.Module):
+            result = None
+            for stmt in node.body:
+                result = self._eval_ast(stmt)
+            return result
+        elif isinstance(node, ast.Expr):
+            return self._eval_ast(node.value)
+        elif isinstance(node, ast.Assign):
+            if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+                raise ValueError("Unsupported assignment")
+            val = self._eval_ast(node.value)
+            self.state[node.targets[0].id] = val
+            return val
+        elif isinstance(node, ast.AugAssign):
+            if not isinstance(node.target, ast.Name):
+                raise ValueError("Unsupported assignment")
+            target = node.target.id
+            cur = self.state.get(target, 0)
+            if isinstance(cur, bool):
+                cur = int(cur)
+            val = self._eval_ast(node.value)
+            if isinstance(val, bool):
+                val = int(val)
+            if isinstance(node.op, ast.Add):
+                self.state[target] = cur + val
+            elif isinstance(node.op, ast.Sub):
+                self.state[target] = cur - val
+            elif isinstance(node.op, ast.Mult):
+                self.state[target] = cur * val
+            elif isinstance(node.op, ast.Div):
+                self.state[target] = cur / val
+            elif isinstance(node.op, ast.FloorDiv):
+                self.state[target] = cur // val
+            elif isinstance(node.op, ast.Mod):
+                self.state[target] = cur % val
+            elif isinstance(node.op, ast.Pow):
+                self.state[target] = cur ** val
+            else:
+                raise ValueError("Unsupported assignment")
+            return self.state[target]
+        elif isinstance(node, ast.BoolOp):
             if isinstance(node.op, ast.And):
                 for v in node.values:
                     if not self._eval_ast(v):
