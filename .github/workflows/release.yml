@@ -75,15 +75,17 @@ jobs:
       - name: Build Editor (folder mode)
         shell: pwsh
         run: |
-          $iconArg = (Test-Path assets/icons/app.ico) ? "--icon assets/icons/app.ico" : ""
-          pyinstaller --noconfirm --windowed -n $env:EDITOR_APPNAME $iconArg $env:EDITOR_ENTRY
+          $iconArgs = @()
+          if (Test-Path 'assets/icons/app.ico') { $iconArgs += @('--icon','assets/icons/app.ico') }
+          pyinstaller --noconfirm --windowed -n $env:EDITOR_APPNAME @iconArgs $env:EDITOR_ENTRY
           if (!(Test-Path "dist/$env:EDITOR_APPNAME")) { Write-Error "Editor dist missing"; exit 1 }
 
       - name: Build Viewer (folder mode)
         shell: pwsh
         run: |
-          $iconArg = (Test-Path assets/icons/app.ico) ? "--icon assets/icons/app.ico" : ""
-          pyinstaller --noconfirm --windowed -n $env:VIEWER_APPNAME $iconArg $env:VIEWER_ENTRY
+          $iconArgs = @()
+          if (Test-Path 'assets/icons/app.ico') { $iconArgs += @('--icon','assets/icons/app.ico') }
+          pyinstaller --noconfirm --windowed -n $env:VIEWER_APPNAME @iconArgs $env:VIEWER_ENTRY
           if (!(Test-Path "dist/$env:VIEWER_APPNAME")) { Write-Error "Viewer dist missing"; exit 1 }
 
       - name: Package ZIPs + latest.* for online installers
