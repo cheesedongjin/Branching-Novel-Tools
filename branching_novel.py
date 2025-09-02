@@ -597,7 +597,7 @@ class BranchingNovelApp(tk.Tk):
         self.text_widget.delete("1.0", tk.END)
         self.text_widget.insert(tk.END, text)
         self.text_widget.configure(state="disabled")
-        self.text_widget.see("1.0")
+        self.text_widget.see(tk.END)
 
     def _render_choices(self, br: Branch):
         # 기존 버튼 제거
