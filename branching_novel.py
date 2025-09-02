@@ -709,30 +709,39 @@ class BranchingNovelApp(tk.Tk):
 
     def _evaluate_condition(self, cond: str) -> bool:
         expr = self._to_python_expr(cond)
-        expr = re.sub(r"\btrue\b", "True", expr, flags=re.IGNORECASE)
-        expr = re.sub(r"\bfalse\b", "False", expr, flags=re.IGNORECASE)
+
         try:
-            tree = ast.parse(expr, mode="exec")
+            # 순수 표현식으로 파싱
+            tree = ast.parse(expr, mode="eval")  # Expression 노드
             result = self._eval_ast(tree)
             return bool(result)
         except Exception:
+            # 어떤 이유로든 실패하면 False
             return False
 
     def _eval_ast(self, node: ast.AST) -> Any:
+        if isinstance(node, ast.Expression):
+            return self._eval_ast(node.body)
+
         if isinstance(node, ast.Module):
+            # exec 모드 대비: 남아있을 가능성에 대응
             result = None
             for stmt in node.body:
                 result = self._eval_ast(stmt)
             return result
-        elif isinstance(node, ast.Expr):
+
+        if isinstance(node, ast.Expr):
             return self._eval_ast(node.value)
-        elif isinstance(node, ast.Assign):
+
+        # 할당은 조건식에서 거의 안 쓰지만 지원 유지
+        if isinstance(node, ast.Assign):
             if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
                 raise ValueError("Unsupported assignment")
             val = self._eval_ast(node.value)
             self.state[node.targets[0].id] = val
             return val
-        elif isinstance(node, ast.AugAssign):
+
+        if isinstance(node, ast.AugAssign):
             if not isinstance(node.target, ast.Name):
                 raise ValueError("Unsupported assignment")
             target = node.target.id
@@ -757,51 +766,52 @@ class BranchingNovelApp(tk.Tk):
             elif isinstance(node.op, ast.Pow):
                 self.state[target] = cur ** val
             else:
-                raise ValueError("Unsupported assignment")
+                raise ValueError("Unsupported aug assignment")
             return self.state[target]
-        elif isinstance(node, ast.BoolOp):
+
+        if isinstance(node, ast.BoolOp):
             if isinstance(node.op, ast.And):
                 for v in node.values:
                     if not self._eval_ast(v):
                         return False
                 return True
-            elif isinstance(node.op, ast.Or):
+            if isinstance(node.op, ast.Or):
                 for v in node.values:
                     if self._eval_ast(v):
                         return True
                 return False
-            else:
-                raise ValueError("Unsupported boolean operator")
-        elif isinstance(node, ast.UnaryOp):
+            raise ValueError("Unsupported boolean operator")
+
+        if isinstance(node, ast.UnaryOp):
             operand = self._eval_ast(node.operand)
             if isinstance(node.op, ast.Not):
                 return not operand
-            elif isinstance(node.op, ast.USub):
+            if isinstance(node.op, ast.USub):
                 return -operand
-            elif isinstance(node.op, ast.UAdd):
+            if isinstance(node.op, ast.UAdd):
                 return +operand
-            else:
-                raise ValueError("Unsupported unary operator")
-        elif isinstance(node, ast.BinOp):
+            raise ValueError("Unsupported unary operator")
+
+        if isinstance(node, ast.BinOp):
             left = self._eval_ast(node.left)
             right = self._eval_ast(node.right)
             if isinstance(node.op, ast.Add):
                 return left + right
-            elif isinstance(node.op, ast.Sub):
+            if isinstance(node.op, ast.Sub):
                 return left - right
-            elif isinstance(node.op, ast.Mult):
+            if isinstance(node.op, ast.Mult):
                 return left * right
-            elif isinstance(node.op, ast.Div):
+            if isinstance(node.op, ast.Div):
                 return left / right
-            elif isinstance(node.op, ast.FloorDiv):
+            if isinstance(node.op, ast.FloorDiv):
                 return left // right
-            elif isinstance(node.op, ast.Mod):
+            if isinstance(node.op, ast.Mod):
                 return left % right
-            elif isinstance(node.op, ast.Pow):
+            if isinstance(node.op, ast.Pow):
                 return left ** right
-            else:
-                raise ValueError("Unsupported binary operator")
-        elif isinstance(node, ast.Compare):
+            raise ValueError("Unsupported binary operator")
+
+        if isinstance(node, ast.Compare):
             left = self._eval_ast(node.left)
             for op, comp in zip(node.ops, node.comparators):
                 right = self._eval_ast(comp)
@@ -823,35 +833,58 @@ class BranchingNovelApp(tk.Tk):
                     return False
                 left = right
             return True
-        elif isinstance(node, ast.Name):
+
+        if isinstance(node, ast.Name):
             return self.state.get(node.id, 0)
-        elif isinstance(node, ast.Constant):
+
+        if isinstance(node, ast.Constant):
             return node.value
-        else:
-            raise ValueError("Unsupported expression")
+
+        # 안전을 위해 기타 노드는 허용하지 않음
+        raise ValueError(f"Unsupported expression: {type(node).__name__}")
 
     def _to_python_expr(self, cond: str) -> str:
-        result = []
+        # 공백 정리
+        s = cond.strip()
+
+        # 우선순위: '!=' → 그대로, 그 외 '!' → ' not '
+        out = []
         i = 0
-        while i < len(cond):
-            ch = cond[i]
+        while i < len(s):
+            ch = s[i]
             if ch == '!':
-                if i + 1 < len(cond) and cond[i + 1] == '=':
-                    result.append('!=')
+                if i + 1 < len(s) and s[i + 1] == '=':
+                    out.append('!=')
                     i += 2
                 else:
-                    result.append(' not ')
+                    out.append(' not ')
                     i += 1
             elif ch == '&':
-                result.append(' and ')
-                i += 1
+                # '&&' → ' and ', 단일 '&'도 허용
+                if i + 1 < len(s) and s[i + 1] == '&':
+                    out.append(' and ')
+                    i += 2
+                else:
+                    out.append(' and ')
+                    i += 1
             elif ch == '|':
-                result.append(' or ')
-                i += 1
+                # '||' → ' or ', 단일 '|'도 허용
+                if i + 1 < len(s) and s[i + 1] == '|':
+                    out.append(' or ')
+                    i += 2
+                else:
+                    out.append(' or ')
+                    i += 1
             else:
-                result.append(ch)
+                out.append(ch)
                 i += 1
-        return ''.join(result)
+
+        expr = ''.join(out)
+
+        # true/false 대소문자 혼용 대응
+        expr = re.sub(r"\btrue\b", "True", expr, flags=re.IGNORECASE)
+        expr = re.sub(r"\bfalse\b", "False", expr, flags=re.IGNORECASE)
+        return expr
 
 
 def load_text_from_file(path: str) -> str:

@@ -765,7 +765,7 @@ class ChapterEditor(tk.Tk):
         root.rowconfigure(0, weight=1)
 
         left = ttk.Frame(root)
-        left.grid(row=0, column=0, sticky="nsw", padx=(0,8))
+        left.grid(row=0, column=0, sticky="nsw", padx=(0, 8))
         left.rowconfigure(2, weight=1)
         left.rowconfigure(3, weight=1)
 
@@ -776,7 +776,7 @@ class ChapterEditor(tk.Tk):
 
         ttk.Label(meta, text="제목(@title)").grid(row=0, column=0, sticky="w")
         self.ent_title = ttk.Entry(meta, width=30)
-        self.ent_title.grid(row=0, column=1, sticky="ew", pady=(0,6))
+        self.ent_title.grid(row=0, column=1, sticky="ew", pady=(0, 6))
         self.ent_title.insert(0, self.story.title)
         self.ent_title.bind("<KeyRelease>", lambda e: self._on_title_changed())
 
@@ -793,14 +793,14 @@ class ChapterEditor(tk.Tk):
 
         # 변수 목록
         var_frame = ttk.LabelFrame(left, text="변수 목록", padding=8)
-        var_frame.grid(row=1, column=0, sticky="ew", pady=(8,0))
+        var_frame.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         var_frame.columnconfigure(0, weight=1)
 
         btns = ttk.Frame(var_frame)
-        btns.grid(row=0, column=0, sticky="ew", pady=(0,6))
+        btns.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         ttk.Button(btns, text="추가", command=self._add_variable).pack(side="left")
-        ttk.Button(btns, text="편집", command=self._edit_variable).pack(side="left", padx=(6,0))
-        ttk.Button(btns, text="삭제", command=self._delete_variable).pack(side="left", padx=(6,0))
+        ttk.Button(btns, text="편집", command=self._edit_variable).pack(side="left", padx=(6, 0))
+        ttk.Button(btns, text="삭제", command=self._delete_variable).pack(side="left", padx=(6, 0))
 
         self.tree_vars = ttk.Treeview(var_frame, columns=("var", "val"), show="headings", height=5)
         self.tree_vars.heading("var", text="변수")
@@ -811,7 +811,7 @@ class ChapterEditor(tk.Tk):
 
         # 챕터 목록
         chap_frame = ttk.LabelFrame(left, text="챕터 목록", padding=8)
-        chap_frame.grid(row=2, column=0, sticky="nsew", pady=(8,0))
+        chap_frame.grid(row=2, column=0, sticky="nsew", pady=(8, 0))
         chap_frame.rowconfigure(1, weight=1)
         chap_frame.columnconfigure(0, weight=1)
 
@@ -821,15 +821,15 @@ class ChapterEditor(tk.Tk):
         self.lst_chapters.bind("<Double-Button-1>", lambda e: self._on_select_chapter())
 
         btns = ttk.Frame(chap_frame)
-        btns.grid(row=0, column=0, sticky="ew", pady=(0,6))
+        btns.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         ttk.Button(btns, text="추가", command=self._add_chapter).pack(side="left")
-        ttk.Button(btns, text="삭제", command=self._delete_current_chapter).pack(side="left", padx=(6,0))
-        ttk.Button(btns, text="위로", command=lambda: self._reorder_chapter(-1)).pack(side="left", padx=(6,0))
-        ttk.Button(btns, text="아래로", command=lambda: self._reorder_chapter(1)).pack(side="left", padx=(6,0))
+        ttk.Button(btns, text="삭제", command=self._delete_current_chapter).pack(side="left", padx=(6, 0))
+        ttk.Button(btns, text="위로", command=lambda: self._reorder_chapter(-1)).pack(side="left", padx=(6, 0))
+        ttk.Button(btns, text="아래로", command=lambda: self._reorder_chapter(1)).pack(side="left", padx=(6, 0))
 
         # 분기 목록
         branch_frame = ttk.LabelFrame(left, text="분기 목록", padding=8)
-        branch_frame.grid(row=3, column=0, sticky="nsew", pady=(8,0))
+        branch_frame.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
         branch_frame.rowconfigure(1, weight=1)
         branch_frame.columnconfigure(0, weight=1)
 
@@ -839,11 +839,11 @@ class ChapterEditor(tk.Tk):
         self.lst_branches.bind("<Double-Button-1>", lambda e: self._on_select_branch())
 
         bbtns = ttk.Frame(branch_frame)
-        bbtns.grid(row=0, column=0, sticky="ew", pady=(0,6))
+        bbtns.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         ttk.Button(bbtns, text="추가", command=self._add_branch).pack(side="left")
-        ttk.Button(bbtns, text="삭제", command=self._delete_current_branch).pack(side="left", padx=(6,0))
-        ttk.Button(bbtns, text="위로", command=lambda: self._reorder_branch(-1)).pack(side="left", padx=(6,0))
-        ttk.Button(bbtns, text="아래로", command=lambda: self._reorder_branch(1)).pack(side="left", padx=(6,0))
+        ttk.Button(bbtns, text="삭제", command=self._delete_current_branch).pack(side="left", padx=(6, 0))
+        ttk.Button(bbtns, text="위로", command=lambda: self._reorder_branch(-1)).pack(side="left", padx=(6, 0))
+        ttk.Button(bbtns, text="아래로", command=lambda: self._reorder_branch(1)).pack(side="left", padx=(6, 0))
 
         # 우측 편집/미리보기 영역
         right = ttk.Notebook(root)
@@ -859,25 +859,25 @@ class ChapterEditor(tk.Tk):
 
         ttk.Label(edit_tab, text="챕터 ID").grid(row=0, column=0, sticky="w")
         self.ent_ch_id = ttk.Entry(edit_tab)
-        self.ent_ch_id.grid(row=0, column=1, sticky="ew", pady=(0,6))
+        self.ent_ch_id.grid(row=0, column=1, sticky="ew", pady=(0, 6))
         self.ent_ch_id.bind("<FocusOut>", lambda e: self._apply_chapter_id_title())
         self.ent_ch_id.bind("<Return>", lambda e: self._apply_chapter_id_title())
 
         ttk.Label(edit_tab, text="챕터 제목").grid(row=1, column=0, sticky="w")
         self.ent_ch_title = ttk.Entry(edit_tab)
-        self.ent_ch_title.grid(row=1, column=1, sticky="ew", pady=(0,6))
+        self.ent_ch_title.grid(row=1, column=1, sticky="ew", pady=(0, 6))
         self.ent_ch_title.bind("<FocusOut>", lambda e: self._apply_chapter_id_title())
         self.ent_ch_title.bind("<Return>", lambda e: self._apply_chapter_id_title())
 
         ttk.Label(edit_tab, text="분기 ID").grid(row=2, column=0, sticky="w")
         self.ent_br_id = ttk.Entry(edit_tab)
-        self.ent_br_id.grid(row=2, column=1, sticky="ew", pady=(0,6))
+        self.ent_br_id.grid(row=2, column=1, sticky="ew", pady=(0, 6))
         self.ent_br_id.bind("<FocusOut>", lambda e: self._apply_branch_id_title())
         self.ent_br_id.bind("<Return>", lambda e: self._apply_branch_id_title())
 
         ttk.Label(edit_tab, text="분기 제목").grid(row=3, column=0, sticky="w")
         self.ent_br_title = ttk.Entry(edit_tab)
-        self.ent_br_title.grid(row=3, column=1, sticky="ew", pady=(0,6))
+        self.ent_br_title.grid(row=3, column=1, sticky="ew", pady=(0, 6))
         self.ent_br_title.bind("<FocusOut>", lambda e: self._apply_branch_id_title())
         self.ent_br_title.bind("<Return>", lambda e: self._apply_branch_id_title())
 
@@ -888,7 +888,8 @@ class ChapterEditor(tk.Tk):
         body_frame.columnconfigure(0, weight=1)
 
         self.txt_body = tk.Text(body_frame, wrap="word", undo=True, height=20,
-                                font=("Malgun Gothic", 12) if sys.platform.startswith("win") else ("Noto Sans CJK KR", 12))
+                                font=("Malgun Gothic", 12) if sys.platform.startswith("win") else ("Noto Sans CJK KR",
+                                                                                                   12))
         self.txt_body.grid(row=0, column=0, sticky="nsew")
         scr = ttk.Scrollbar(body_frame, orient="vertical", command=self.txt_body.yview)
         scr.grid(row=0, column=1, sticky="ns")
@@ -897,7 +898,7 @@ class ChapterEditor(tk.Tk):
 
         # 선택지 편집
         choices_frame = ttk.LabelFrame(edit_tab, text="선택지(버튼)", padding=6)
-        choices_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(8,0))
+        choices_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         choices_frame.columnconfigure(0, weight=1)
 
         self.tree_choices = ttk.Treeview(choices_frame, columns=("text", "target"), show="headings", height=6)
@@ -909,7 +910,7 @@ class ChapterEditor(tk.Tk):
 
         ch_btns = ttk.Frame(choices_frame)
         ch_btns.grid(row=0, column=1, sticky="ns")
-        ttk.Button(ch_btns, text="추가", command=self._add_choice).grid(row=0, column=0, pady=(0,4))
+        ttk.Button(ch_btns, text="추가", command=self._add_choice).grid(row=0, column=0, pady=(0, 4))
         ttk.Button(ch_btns, text="편집", command=self._edit_choice).grid(row=1, column=0, pady=4)
         ttk.Button(ch_btns, text="삭제", command=self._delete_choice).grid(row=2, column=0, pady=4)
         ttk.Button(ch_btns, text="위로", command=lambda: self._reorder_choice(-1)).grid(row=3, column=0, pady=4)
@@ -942,12 +943,19 @@ class ChapterEditor(tk.Tk):
 
         # 하단 버튼 바
         bottom = ttk.Frame(self)
-        bottom.pack(side="bottom", fill="x", padx=8, pady=(0,8))
-        ttk.Button(bottom, text="유효성 검사", command=self._validate_story).pack(side="left")
-        ttk.Button(bottom, text="저장", command=self._save_file).pack(side="right")
-        ttk.Button(bottom, text="미리보기 반영", command=self._apply_preview_to_model).pack(side="right", padx=(0,6))
-        ttk.Button(bottom, text="미리보기 갱신", command=self._update_preview).pack(side="right", padx=(0,6))
-        ttk.Button(bottom, text="미리보기 실행", command=self._run_preview).pack(side="right", padx=(0,6))
+        bottom.pack(side="bottom", fill="x", padx=8, pady=(0, 8))
+        # 왼쪽: 분석/검사
+        left_btns = ttk.Frame(bottom)
+        left_btns.pack(side="left")
+        ttk.Button(left_btns, text="유효성 검사", command=self._validate_story).pack(side="left")
+        ttk.Button(left_btns, text="무한 루프 분석", command=self._analyze_infinite_loops).pack(side="left", padx=(6, 0))
+        # 오른쪽: 저장/미리보기
+        right_btns = ttk.Frame(bottom)
+        right_btns.pack(side="right")
+        ttk.Button(right_btns, text="저장", command=self._save_file).pack(side="right")
+        ttk.Button(right_btns, text="미리보기 반영", command=self._apply_preview_to_model).pack(side="right", padx=(0, 6))
+        ttk.Button(right_btns, text="미리보기 갱신", command=self._update_preview).pack(side="right", padx=(0, 6))
+        ttk.Button(right_btns, text="미리보기 실행", command=self._run_preview).pack(side="right", padx=(0, 6))
 
         root.pack(fill="both", expand=True)
 
@@ -1775,6 +1783,561 @@ class ChapterEditor(tk.Tk):
         base = "Branching Novel Editor"
         tail = f" - {os.path.basename(self.current_file)}" if self.current_file else ""
         self.title(f"{base}{tail}{mark}")
+
+    # ---------- 무한 루프 검사 ----------
+    def _analyze_infinite_loops(self):
+        """
+        무한 루프 간단 리포트:
+        - 강한 해석(가드 기반 고정점 + SCC + 경로 시뮬레이션)은 유지
+        - 출력은 요약/조치 중심으로 간결화
+        """
+        import math
+        import tkinter as tk
+        from tkinter import ttk, messagebox
+
+        # 1) 모델 최신화
+        if not self._apply_preview_to_model():
+            return
+        self._apply_body_to_model()
+
+        story = self.story
+        branches = story.branches
+        start_id = story.start_id
+
+        if not start_id or start_id not in branches:
+            messagebox.showerror("오류", "시작 분기(@start)가 유효하지 않습니다.")
+            return
+
+        # -----------------------
+        # 공용 유틸
+        # -----------------------
+        EPS = 1e-9
+        BIG = 1e18
+
+        def as_point(v):
+            if isinstance(v, bool):
+                v = int(v)
+            return (float(v), float(v))
+
+        def join_interval(a, b):
+            alo, ahi = a
+            blo, bhi = b
+            return (min(alo, blo), max(ahi, bhi))
+
+        def meet_interval(iv, lower=None, upper=None, open_lower=False, open_upper=False):
+            lo, hi = iv
+            if lower is not None:
+                lo = max(lo, lower + (EPS if open_lower else 0.0))
+            if upper is not None:
+                hi = min(hi, upper - (EPS if open_upper else 0.0))
+            if lo > hi:
+                return None
+            return (lo, hi)
+
+        def widen_unknown(_iv):
+            return (-BIG, BIG)
+
+        # 조건 파싱/평가(AND만 지원)
+        simple_atom_re = re.compile(r"^\s*([A-Za-z_]\w*)\s*(==|!=|>=|<=|>|<)\s*([^\s]+)\s*$", re.IGNORECASE)
+
+        def _num_parse(val_text):
+            vv = val_text.strip().lower()
+            if vv == "true":  return 1.0
+            if vv == "false": return 0.0
+            if re.match(r"^-?\d+$", vv): return float(int(vv))
+            try:
+                return float(vv)
+            except Exception:
+                return None
+
+        def parse_condition(cond_text):
+            if not cond_text or cond_text.strip() == "": return []
+            lc = cond_text.lower()
+            if " or " in lc or " not " in lc or "(" in lc or ")" in lc or "|" in cond_text or "&" in cond_text:
+                return None  # 복잡식은 불확실
+            parts = re.split(r"\s+and\s+", cond_text, flags=re.IGNORECASE)
+            atoms = []
+            for part in parts:
+                m = simple_atom_re.match(part)
+                if not m: return None
+                var, op, val = m.groups()
+                c = _num_parse(val)
+                if c is None: return None
+                atoms.append((var, op, c))
+            return atoms
+
+        def eval_atoms_over_interval(atoms, state_map):
+            # 항상 참/항상 거짓/불확실(None)
+            result = True
+            for var, op, c in atoms:
+                lo, hi = state_map.get(var, as_point(0.0))
+                tri = None
+                if op == "==":
+                    if lo == hi == c:
+                        tri = True
+                    elif c < lo or c > hi:
+                        tri = False
+                elif op == "!=":
+                    if lo == hi == c:
+                        tri = False
+                    elif c < lo or c > hi:
+                        tri = True
+                elif op == ">":
+                    if lo > c:
+                        tri = True
+                    elif hi <= c:
+                        tri = False
+                elif op == ">=":
+                    if lo >= c:
+                        tri = True
+                    elif hi < c:
+                        tri = False
+                elif op == "<":
+                    if hi < c:
+                        tri = True
+                    elif lo >= c:
+                        tri = False
+                elif op == "<=":
+                    if hi <= c:
+                        tri = True
+                    elif lo > c:
+                        tri = False
+                if tri is False:
+                    return False
+                if tri is None:
+                    result = None
+            return result
+
+        def refine_with_atoms(atoms, st):
+            # 가드로 상태를 좁힘. 불가능이면 None
+            if not atoms: return dict(st)
+            cur = dict(st)
+            for var, op, c in atoms:
+                lo, hi = cur.get(var, as_point(0.0))
+                if op == "==":
+                    new_iv = meet_interval((lo, hi), lower=c, upper=c)
+                elif op == "!=":
+                    if lo == hi == c: return None
+                    new_iv = (lo, hi)
+                elif op == ">":
+                    new_iv = meet_interval((lo, hi), lower=c, open_lower=True)
+                elif op == ">=":
+                    new_iv = meet_interval((lo, hi), lower=c)
+                elif op == "<":
+                    new_iv = meet_interval((lo, hi), upper=c, open_upper=True)
+                elif op == "<=":
+                    new_iv = meet_interval((lo, hi), upper=c)
+                else:
+                    return None
+                if new_iv is None: return None
+                cur[var] = new_iv
+            return cur
+
+        def eval_atoms_concrete(atoms, valuation):
+            if atoms is None: return None
+            for var, op, c in atoms:
+                v = valuation.get(var, 0.0)
+                if op == "==":
+                    ok = (v == c)
+                elif op == "!=":
+                    ok = (v != c)
+                elif op == ">":
+                    ok = (v > c)
+                elif op == ">=":
+                    ok = (v >= c)
+                elif op == "<":
+                    ok = (v < c)
+                elif op == "<=":
+                    ok = (v <= c)
+                else:
+                    ok = False
+                if not ok: return False
+            return True
+
+        # 액션
+        def apply_actions_interval(pre_state, actions):
+            st = dict(pre_state)
+            for act in actions:
+                var = act.var
+                val = act.value
+                if isinstance(val, bool): val = int(val)
+                cur = st.get(var, as_point(0.0))
+                if act.op == "set":
+                    st[var] = as_point(val)
+                elif act.op == "add":
+                    lo, hi = cur;
+                    st[var] = (lo + val, hi + val)
+                elif act.op == "sub":
+                    lo, hi = cur;
+                    st[var] = (lo - val, hi - val)
+                else:
+                    st[var] = widen_unknown(cur)
+            return st
+
+        def apply_actions_concrete(valuation, actions):
+            v = dict(valuation)
+            for act in actions:
+                var = act.var
+                a = v.get(var, 0.0)
+                b = act.value
+                if isinstance(b, bool): b = int(b)
+                if act.op == "set":
+                    v[var] = float(b)
+                elif act.op == "add":
+                    v[var] = float(a + b)
+                elif act.op == "sub":
+                    v[var] = float(a - b)
+                elif act.op == "mul":
+                    v[var] = float(a * b)
+                elif act.op == "div":
+                    try:
+                        v[var] = float(a / b)
+                    except Exception:
+                        v[var] = float('inf') if a >= 0 else float('-inf')
+                elif act.op == "floordiv":
+                    try:
+                        v[var] = float(a // b)
+                    except Exception:
+                        v[var] = float('inf') if a >= 0 else float('-inf')
+                elif act.op == "mod":
+                    try:
+                        v[var] = float(a % b)
+                    except Exception:
+                        v[var] = 0.0
+                elif act.op == "pow":
+                    try:
+                        v[var] = float(a ** b)
+                    except Exception:
+                        v[var] = float('inf')
+                else:
+                    v[var] = a
+            return v
+
+        # 엣지(가드) 준비
+        edges = {}
+        for bid, br in branches.items():
+            lst = []
+            for ch in br.choices:
+                atoms = parse_condition(ch.condition or "")
+                lst.append((ch, atoms))
+            edges[bid] = lst
+
+        # 2) 고정점 전파(가드로 필터)
+        initial = {k: as_point(int(v) if isinstance(v, bool) else v) for k, v in story.variables.items()}
+        pre_state = {bid: None for bid in branches.keys()}
+        post_state = {bid: None for bid in branches.keys()}
+
+        pre_state[start_id] = dict(initial)
+        work = [start_id]
+        iter_count = {bid: 0 for bid in branches.keys()}
+        LIMIT = max(200, 10 * max(1, len(branches)))
+
+        while work and sum(iter_count.values()) < LIMIT:
+            bid = work.pop()
+            iter_count[bid] += 1
+            br = branches[bid]
+            cur_pre = pre_state[bid] or {}
+            cur_post = apply_actions_interval(cur_pre, br.actions)
+
+            # post join
+            if post_state[bid] is None:
+                post_state[bid] = cur_post
+            else:
+                merged = {}
+                keys = set(post_state[bid].keys()) | set(cur_post.keys())
+                for k in keys:
+                    a = post_state[bid].get(k, as_point(0.0))
+                    b = cur_post.get(k, as_point(0.0))
+                    merged[k] = join_interval(a, b)
+                post_state[bid] = merged
+
+            # 전파
+            for ch, atoms in edges[bid]:
+                tgt = ch.target_id
+                if tgt not in branches: continue
+                if atoms is None:
+                    filtered = dict(post_state[bid])  # 복잡식: 필터 없이 전파
+                else:
+                    filtered = refine_with_atoms(atoms, post_state[bid])
+                if filtered is None: continue
+
+                if pre_state[tgt] is None:
+                    pre_state[tgt] = filtered
+                    work.append(tgt)
+                else:
+                    merged = {}
+                    changed = False
+                    keys = set(pre_state[tgt].keys()) | set(filtered.keys())
+                    for k in keys:
+                        a = pre_state[tgt].get(k, as_point(0.0))
+                        b = filtered.get(k, as_point(0.0))
+                        m = join_interval(a, b)
+                        merged[k] = m
+                        if m != a: changed = True
+                    if changed:
+                        pre_state[tgt] = merged
+                        work.append(tgt)
+
+        # 3) SCC
+        graph = {bid: [c.target_id for c in br.choices if c.target_id in branches] for bid, br in branches.items()}
+
+        index = {};
+        lowlink = {};
+        stack = [];
+        onstack = set();
+        cur_idx = [0];
+        scc_list = []
+
+        def strongconnect(v):
+            index[v] = cur_idx[0];
+            lowlink[v] = cur_idx[0];
+            cur_idx[0] += 1
+            stack.append(v);
+            onstack.add(v)
+            for w in graph.get(v, []):
+                if w not in index:
+                    strongconnect(w);
+                    lowlink[v] = min(lowlink[v], lowlink[w])
+                elif w in onstack:
+                    lowlink[v] = min(lowlink[v], index[w])
+            if lowlink[v] == index[v]:
+                comp = []
+                while True:
+                    w = stack.pop();
+                    onstack.remove(w);
+                    comp.append(w)
+                    if w == v: break
+                scc_list.append(comp)
+
+        for v in graph.keys():
+            if v not in index:
+                strongconnect(v)
+
+        reachable = {b for b, st in pre_state.items() if st is not None}
+
+        def label_of(bid):
+            br = branches[bid]
+            ch = story.chapters.get(br.chapter_id)
+            ch_title = ch.title if ch else br.chapter_id
+            return f"{bid} | {br.title} @ {ch_title}"
+
+        # 4) 판정 + 증거 경로
+        definite = []
+        witnessed = []  # (comp, path)
+        possible = []
+
+        def pick_mid(iv):
+            lo, hi = iv
+            if math.isinf(lo) or math.isinf(hi):
+                if math.isinf(lo) and math.isinf(hi): return 0.0
+                if math.isinf(lo):  return hi - 1.0
+                return lo + 1.0
+            return (lo + hi) / 2.0
+
+        def build_initial_valuation(bid):
+            st = post_state.get(bid) or pre_state.get(bid) or {}
+            v = {}
+            related = set()
+            for nid in graph.keys():
+                for ch, atoms in edges[nid]:
+                    if atoms:
+                        for var, _, _ in atoms: related.add(var)
+                for a in branches[nid].actions:
+                    related.add(a.var)
+            for k in related:
+                iv = st.get(k, as_point(0.0))
+                v[k] = float(round(pick_mid(iv), 6))
+            return v
+
+        def try_witness_for_comp(comp, max_steps=400):
+            related = set()
+            for bid in comp:
+                for ch, atoms in edges[bid]:
+                    if atoms:
+                        for var, _, _ in atoms: related.add(var)
+                for a in branches[bid].actions:
+                    related.add(a.var)
+            related = sorted(list(related))
+
+            def key_of(bid, val):
+                return (bid, tuple(float(round(val.get(k, 0.0), 6)) for k in related))
+
+            start_nodes = [b for b in comp if b in reachable]
+            if not start_nodes: return None
+            start = start_nodes[0]
+            val = build_initial_valuation(start)
+            seen = set();
+            path = [];
+            cur = start;
+            steps = 0
+            while steps < max_steps:
+                steps += 1
+                sig = key_of(cur, val)
+                if sig in seen: return path
+                seen.add(sig)
+                br = branches[cur]
+                candidates = []
+                for ch, atoms in edges[cur]:
+                    if ch.target_id in comp:
+                        ok = eval_atoms_concrete(atoms, val) if atoms is not None else True
+                        if ok or atoms is None: candidates.append((ch, atoms))
+                if not candidates: return None
+                ch, atoms = candidates[0]
+                val = apply_actions_concrete(val, br.actions)
+                path.append((br.branch_id, ch.text, ch.target_id))
+                cur = ch.target_id
+            return None
+
+        for comp in scc_list:
+            # 루프 아님 필터
+            if len(comp) == 1:
+                only = comp[0]
+                self_loop = any((c.target_id == only) for c in branches[only].choices)
+                if not self_loop: continue
+            if not any(b in reachable for b in comp): continue
+
+            all_nodes_have_internal_always = True
+            any_external_satisfiable = False
+            all_nodes_have_internal_possible = True
+
+            for bid in comp:
+                br = branches[bid]
+                pst = post_state[bid] or pre_state[bid] or {}
+                internal_always = False
+                internal_possible = False
+                external_satisfy = False
+
+                for ch, atoms in edges[bid]:
+                    if atoms is None:
+                        cond_every = None
+                        cond_sat = True
+                    else:
+                        cond_every = eval_atoms_over_interval(atoms, pst)
+                        cond_sat = refine_with_atoms(atoms, pst) is not None
+
+                    if ch.target_id in comp:
+                        if cond_every is True:
+                            internal_always = True
+                            internal_possible = True
+                        elif cond_sat:
+                            internal_possible = True
+                    else:
+                        if cond_sat:
+                            external_satisfy = True
+
+                if not internal_always:
+                    all_nodes_have_internal_always = False
+                if not internal_possible:
+                    all_nodes_have_internal_possible = False
+                if external_satisfy:
+                    any_external_satisfiable = True
+
+            if all_nodes_have_internal_always and not any_external_satisfiable:
+                definite.append(comp)
+            else:
+                w = try_witness_for_comp(comp)
+                if w:
+                    witnessed.append((comp, w))
+                elif all_nodes_have_internal_possible:
+                    possible.append(comp)
+
+        # 5) 간결 리포트 생성
+        def nodes_summary(comp, limit=6):
+            labels = [label_of(b) for b in comp]
+            if len(labels) <= limit:
+                return " → ".join(labels)
+            return " → ".join(labels[:limit]) + f" … (+{len(labels) - limit})"
+
+        def exit_edges_summary(comp, max_list=3):
+            # comp 바깥으로 나가는 엣지 3개까지 요약: src -> tgt | 조건 | 판정
+            items = []
+            for bid in comp:
+                br = branches[bid]
+                pst = post_state[bid] or pre_state[bid] or {}
+                for ch, atoms in edges[bid]:
+                    if ch.target_id in comp: continue
+                    if atoms is None:
+                        verdict = "불확실(복잡식)"
+                        cond_s = "(복잡식)"
+                    else:
+                        every = eval_atoms_over_interval(atoms, pst)
+                        cond_s = " and ".join(f"{v} {op} {val}" for (v, op, val) in atoms) if atoms else "(조건 없음)"
+                        if every is True:
+                            verdict = "항상 열림"
+                        else:
+                            sat = refine_with_atoms(atoms, pst) is not None
+                            verdict = "가능" if sat else "불가능"
+                    items.append(f"{bid} → {ch.target_id} | {cond_s} | {verdict}")
+            if not items: return "외부 탈출 경로 없음"
+            if len(items) > max_list:
+                return "\n".join(items[:max_list] + [f"... (+{len(items) - max_list}개 더 있음)"])
+            return "\n".join(items)
+
+        lines = []
+        lines.append("무한 루프 진단 요약")
+        lines.append("")
+        lines.append(f"- 확정: {len(definite)}개, 증거로 확인: {len(witnessed)}개, 검토 필요(가능): {len(possible)}개")
+        lines.append("")
+
+        if definite:
+            lines.append("[확정 무한 루프]  반드시 수정 필요")
+            for i, comp in enumerate(definite, 1):
+                lines.append(f"{i}. 루프 노드 {len(comp)}개")
+                lines.append(f"   요약 경로: {nodes_summary(comp)}")
+                lines.append("   탈출 가능성: 외부 탈출 경로 없음(모든 노드가 내부로 항상 이동)")
+                lines.append("   조치: 외부로 나가는 선택지 추가, 또는 내부 선택지에 탈출 조건(예: 변수 감소+임계 가드) 부여")
+                lines.append("")
+        if witnessed:
+            lines.append("[증거 경로로 확인된 무한 루프]  실제 실행으로 반복됨")
+            for i, (comp, path) in enumerate(witnessed, 1):
+                lines.append(f"{i}. 루프 노드 {len(comp)}개")
+                lines.append(f"   요약 경로: {nodes_summary(comp)}")
+                lines.append("   예시 실행 경로(일부):")
+                for step in path[:12]:
+                    src_bid, text, tgt_bid = step
+                    lines.append(f"     {src_bid} --[{text}]--> {tgt_bid}")
+                if len(path) > 12:
+                    lines.append(f"     ... (+{len(path) - 12} 단계)")
+                ex = exit_edges_summary(comp, max_list=2)
+                lines.append("   외부 탈출 후보:")
+                for ln in ex.split("\n"):
+                    lines.append("     " + ln)
+                lines.append("   조치: 위 탈출 후보의 조건을 충족시킬 기회가 실제로 오는지 확인. 필요 시 조건/액션 설계 조정")
+                lines.append("")
+        if possible:
+            lines.append("[검토 필요(가능 무한 루프)]  구조상 순환, 탈출 경로는 있을 수 있음")
+            for i, comp in enumerate(possible, 1):
+                lines.append(f"{i}. 루프 노드 {len(comp)}개")
+                lines.append(f"   요약 경로: {nodes_summary(comp)}")
+                ex = exit_edges_summary(comp, max_list=3)
+                lines.append("   외부 탈출 요약:")
+                for ln in ex.split("\n"):
+                    lines.append("     " + ln)
+                lines.append("   조치: '항상 열림' 또는 '불확실' 엣지가 있다면 조건을 구체화. '가능'만 존재한다면 그 조건을 만족할 상태가 실제로 도달 가능한지 점검")
+                lines.append("")
+
+        lines.append("정의:")
+        lines.append("- 확정: 각 노드에서 내부 이동이 항상 가능하고, 외부 탈출은 어떤 상태에서도 불가능")
+        lines.append("- 증거: 실제 값으로 내부만 따라가 반복 도달 확인")
+        lines.append("- 가능: 순환은 있으나 외부 탈출이 조건에 따라 열릴 수 있음")
+
+        # 팝업 표시
+        win = tk.Toplevel(self)
+        win.title("무한 루프 분석")
+        win.geometry("900x560")
+        frm = ttk.Frame(win, padding=8)
+        frm.pack(fill="both", expand=True)
+
+        txt = tk.Text(frm, wrap="word", font=("Consolas", 10))
+        txt.pack(side="left", fill="both", expand=True)
+        scr = ttk.Scrollbar(frm, orient="vertical", command=txt.yview)
+        scr.pack(side="right", fill="y")
+        txt.configure(yscrollcommand=scr.set)
+        txt.insert(tk.END, "\n".join(lines))
+        txt.configure(state="disabled")
+
+        ttk.Button(win, text="닫기", command=win.destroy).pack(pady=6)
+
 
 # ---------- 진입점 ----------
 
