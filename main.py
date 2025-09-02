@@ -188,6 +188,14 @@ class StoryParser:
                 story.chapters[current_chapter.chapter_id] = current_chapter
                 continue
 
+            # 기타 메타데이터는 1차 루프에서 처리했으므로 건너뛴다
+            if (
+                stripped.startswith("@title:")
+                or stripped.startswith("@start:")
+                or stripped.startswith("@ending:")
+            ):
+                continue
+
             # 분기 시작
             if stripped.startswith("#"):
                 if current_chapter is None:
