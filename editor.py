@@ -1530,13 +1530,13 @@ class ChapterEditor(tk.Tk):
         return True
 
     def _run_preview(self):
-        """main.py의 실행기를 이용하여 현재 스토리를 실행한다."""
+        """branching_novel.py의 실행기를 이용하여 현재 스토리를 실행한다."""
         if not self._apply_preview_to_model():
             return
         self._apply_body_to_model()
 
         import copy
-        from main import BranchingNovelApp
+        from branching_novel import BranchingNovelApp
 
         preview_story = copy.deepcopy(self.story)
         file_path = self.current_file or "<preview>"
