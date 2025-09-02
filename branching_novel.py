@@ -491,7 +491,7 @@ class BranchingNovelApp(tk.Tk):
         for cid in self.visited_chapters:
             ch = self.story.get_chapter(cid)
             title = ch.title if ch and ch.title else cid
-            self.chapter_list.insert(tk.END, f"{cid}  |  {title}")
+            self.chapter_list.insert(tk.END, title)
         self.chapter_list.configure(state="disabled")
 
     def _go_prev_chapter(self, event=None):
