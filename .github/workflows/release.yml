@@ -333,5 +333,7 @@ jobs:
           make_latest: true
           draft: false
           prerelease: false
+          allowUpdates: true        # ← 이미 있는 릴리스를 업데이트
+          remove_assets: true       # ← 기존 에셋 제거 후 새 파일 업로드(파일 교체 확실)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
