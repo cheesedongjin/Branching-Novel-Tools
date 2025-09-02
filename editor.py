@@ -1010,21 +1010,28 @@ class ChapterEditor(tk.Tk):
             self.after(0, lambda: self.txt_preview.focus_set())
 
     def _ensure_preview_applied(self) -> bool:
+        # 미리보기에 수정본이 없으면 그대로 진행
         if not self.preview_modified:
             return True
+
         res = messagebox.askyesnocancel(
             "미리보기 반영",
             "미리보기에서 수정된 내용이 반영되지 않았습니다. 반영하시겠습니까?",
             parent=self,
         )
         if res is None:
+            # 취소
             return False
         if res:
+            # 예: 미리보기 텍스트 → 모델 반영(파싱 실패 시 False)
             if not self._apply_preview_to_model():
                 return False
+            return True
         else:
-            self._update_preview()
-        return True
+            # 아니오: 미리보기 변경을 버리고 모델 기준으로 강제 갱신
+            self.preview_modified = False
+            self._update_preview(force=True)
+            return True
 
     # ---------- 상호작용 ----------
     def _load_chapter_to_form(self, cid: str):
@@ -1514,14 +1521,23 @@ class ChapterEditor(tk.Tk):
         self._build_find_results(query, self.find_scope.get())
         self._find_step(1)
 
-    def _update_preview(self):
+    def _update_preview(self, force: bool = False):
+        # 사용자가 미리보기를 수정했을 때는 기본 덮어쓰기를 막는다.
+        # 단, 의도적으로 버리기/강제 동기화가 필요할 땐 force=True로 호출.
+        if self.preview_modified and not force:
+            return
+
         self._apply_body_to_model()
         txt = self.story.serialize()
+
         self._preview_updating = True
-        self.txt_preview.delete("1.0", tk.END)
-        self.txt_preview.insert(tk.END, txt)
-        self.txt_preview.edit_modified(False)
-        self._preview_updating = False
+        try:
+            self.txt_preview.delete("1.0", tk.END)
+            self.txt_preview.insert(tk.END, txt)
+            self.txt_preview.edit_modified(False)
+        finally:
+            self._preview_updating = False
+
         self.preview_modified = False
 
     def _apply_preview_to_model(self) -> bool:
@@ -1715,8 +1731,31 @@ class ChapterEditor(tk.Tk):
         messagebox.showinfo("저장", "저장 완료.")
 
     def _exit_app(self):
-        if not self._confirm_discard_changes():
+        # 1) 미리보기에서 수정한 내용이 있으면 먼저 처리(반영 or 폐기)
+        if not self._ensure_preview_applied():
             return
+
+        # 2) 더티 플래그가 있으면 저장 여부 확인
+        if self.dirty:
+            res = messagebox.askyesnocancel("변경 내용", "저장하지 않은 변경사항이 있습니다. 저장하시겠습니까?")
+            if res is None:
+                # 취소
+                return
+            if res is True:
+                # 예: 저장 시도
+                self._save_file()
+                # 저장이 성공하면 self.dirty가 False가 됨(저장 취소/실패 시 여전히 True)
+                if self.dirty:
+                    # 사용자가 '다른 이름으로 저장'에서 취소했거나, 파싱/저장 오류로 실패
+                    return
+                # 저장 성공 → 종료
+                self.destroy()
+                return
+            # res is False (아니오) → 저장하지 않고 종료
+            self.destroy()
+            return
+
+        # 3) 변경사항이 없으면 바로 종료
         self.destroy()
 
     def _confirm_discard_changes(self) -> bool:
