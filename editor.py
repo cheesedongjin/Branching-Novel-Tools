@@ -934,6 +934,7 @@ class ChapterEditor(tk.Tk):
         pvy.grid(row=0, column=1, sticky="ns")
         self.txt_preview.configure(xscrollcommand=pvx.set, yscrollcommand=pvy.set)
         self.txt_preview.bind("<<Modified>>", self._on_preview_modified)
+        self.txt_preview.bind("<FocusOut>", self._on_preview_focus_out)
         self.txt_preview.edit_modified(False)
 
         # 찾기/변경은 새 창에서 열림
@@ -1003,6 +1004,27 @@ class ChapterEditor(tk.Tk):
             if not self._preview_updating:
                 self.preview_modified = True
                 self._set_dirty(True)
+
+    def _on_preview_focus_out(self, evt):
+        if not self._ensure_preview_applied():
+            self.after(0, lambda: self.txt_preview.focus_set())
+
+    def _ensure_preview_applied(self) -> bool:
+        if not self.preview_modified:
+            return True
+        res = messagebox.askyesnocancel(
+            "미리보기 반영",
+            "미리보기에서 수정된 내용이 반영되지 않았습니다. 반영하시겠습니까?",
+            parent=self,
+        )
+        if res is None:
+            return False
+        if res:
+            if not self._apply_preview_to_model():
+                return False
+        else:
+            self._update_preview()
+        return True
 
     # ---------- 상호작용 ----------
     def _load_chapter_to_form(self, cid: str):
