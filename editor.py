@@ -147,7 +147,8 @@ class ParseError(Exception):
 
 class StoryParser:
     def parse(self, text: str) -> Story:
-        lines = text.splitlines()
+        text = text.lstrip("\ufeff")
+        lines = [ln.lstrip("\ufeff") for ln in text.splitlines()]
         story = Story()
         current: Optional[Chapter] = None
         buffer: List[str] = []
@@ -168,6 +169,9 @@ class StoryParser:
             line = raw.rstrip("\n")
             s = line.strip()
             i += 1
+
+            if s.startswith("@"):
+                continue
 
             if s.startswith("#"):
                 if current is not None and buffer:
