@@ -123,6 +123,7 @@ class Story:
     title: str = "Untitled"
     start_id: Optional[str] = None  # 시작 분기 ID
     ending_text: str = "The End"
+    show_disabled: bool = False
     chapters: Dict[str, Chapter] = field(default_factory=dict)
     branches: Dict[str, Branch] = field(default_factory=dict)
     variables: Dict[str, Union[int, float, bool]] = field(default_factory=dict)
@@ -168,6 +169,10 @@ class StoryParser:
             if line.startswith("@ending:"):
                 story.ending_text = line[len("@ending:"):].strip() or "The End"
                 continue
+            if line.startswith("@show-disabled:"):
+                val = line[len("@show-disabled:"):].strip().lower()
+                story.show_disabled = val in ("true", "1", "yes", "on")
+                continue
 
         # 실제 파싱 루프
         i = 0
@@ -191,6 +196,7 @@ class StoryParser:
                 stripped.startswith("@title:")
                 or stripped.startswith("@start:")
                 or stripped.startswith("@ending:")
+                or stripped.startswith("@show-disabled:")
             ):
                 continue
 
@@ -895,7 +901,6 @@ def load_text_from_file(path: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Branching Novel GUI")
     parser.add_argument("file", nargs="?", help="Story file path (.bnov)")
-    parser.add_argument("--show-disabled", action="store_true", help="Show unavailable choices as disabled")
     args = parser.parse_args()
 
     file_path = args.file
@@ -926,7 +931,7 @@ def main():
         messagebox.showerror("오류", f"파일을 읽는 중 오류가 발생했습니다:\n{e}")
         sys.exit(1)
 
-    app = BranchingNovelApp(story, file_path, show_disabled=args.show_disabled)
+    app = BranchingNovelApp(story, file_path, show_disabled=story.show_disabled)
     app.mainloop()
 
 
