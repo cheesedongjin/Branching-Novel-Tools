@@ -710,7 +710,8 @@ class ChapterEditor(tk.Tk):
         self._build_menu()
         self._build_ui()
         self._refresh_chapter_list()
-        self._load_chapter_to_form(init_id)
+        # initialize editor with the first chapter
+        self._load_chapter_to_form(ch_id)
         self._refresh_meta_panel()
         self._update_preview()
 
