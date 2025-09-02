@@ -90,11 +90,12 @@ class Choice:
     text: str
     target_id: str
     condition: Optional[str] = None
+    actions: List["Action"] = field(default_factory=list)
 
 
 @dataclass
 class Action:
-    op: str  # 'set' or 'add'
+    op: str  # 'set', 'add', 'sub', 'mul', 'div', 'floordiv', 'mod', 'pow'
     var: str
     value: Union[int, bool]
 
@@ -265,7 +266,7 @@ class StoryParser:
 
     def _parse_choice_line(self, line: str) -> Choice:
         """
-        형식: "* [조건] text -> target_id" 또는 "* text -> target_id"
+        형식: "* [조건] {행동들} text -> target_id" 또는 필요한 부분만 포함
         """
         body = line[2:].strip()
         if "->" not in body:
@@ -273,34 +274,63 @@ class StoryParser:
         left, right = body.split("->", 1)
         left = left.strip()
         condition: Optional[str] = None
+        actions: List[Action] = []
         text: str
         if left.startswith("["):
             end = left.find("]")
             if end == -1:
                 raise ParseError("Missing closing ']' in condition.")
             condition = left[1:end].strip()
+            left = left[end + 1:].strip()
+        if left.startswith("{"):
+            end = left.find("}")
+            if end == -1:
+                raise ParseError("Missing closing '}' in actions.")
+            act_block = left[1:end].strip()
+            actions = self._parse_actions_block(act_block)
             text = left[end + 1:].strip()
         else:
             text = left
         target = right.strip()
         if not text or not target:
             raise ParseError("Choice text or target is empty.")
-        return Choice(text=text, target_id=target, condition=condition)
+        return Choice(text=text, target_id=target, condition=condition, actions=actions)
+
+    def _parse_actions_block(self, block: str) -> List[Action]:
+        acts: List[Action] = []
+        if not block:
+            return acts
+        parts = [p.strip() for p in block.split(';') if p.strip()]
+        for part in parts:
+            m = re.match(r"^(\w+)\s*(=|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)$", part)
+            if not m:
+                raise ParseError("Invalid action syntax.")
+            var, op, val = m.groups()
+            op_map = {
+                '=': 'set',
+                '+=': 'add',
+                '-=': 'sub',
+                '*=': 'mul',
+                '/=': 'div',
+                '//=': 'floordiv',
+                '%=': 'mod',
+                '**=': 'pow',
+            }
+            acts.append(Action(op=op_map[op], var=var, value=self._parse_value(val.strip())))
+        return acts
 
     def _parse_action_line(self, line: str) -> Action:
         content = line[1:].strip()
-        if content.startswith("set "):
-            rest = content[4:].strip()
-            if "=" not in rest:
-                raise ParseError("Invalid set syntax.")
-            var, val = rest.split("=", 1)
-            return Action(op="set", var=var.strip(), value=self._parse_value(val.strip()))
-        if content.startswith("add "):
-            rest = content[4:].strip()
-            if "+=" not in rest:
-                raise ParseError("Invalid add syntax.")
-            var, val = rest.split("+=", 1)
-            return Action(op="add", var=var.strip(), value=self._parse_value(val.strip()))
+        for key, sym in [
+            ("set", "="), ("add", "+="), ("sub", "-="), ("mul", "*="),
+            ("div", "/="), ("floordiv", "//="), ("mod", "%="), ("pow", "**=")
+        ]:
+            if content.startswith(f"{key} "):
+                rest = content[len(key)+1:].strip()
+                if sym not in rest:
+                    raise ParseError("Invalid action syntax.")
+                var, val = rest.split(sym, 1)
+                return Action(op=key, var=var.strip(), value=self._parse_value(val.strip()))
         raise ParseError("Unknown action command.")
 
     def _parse_value(self, token: str) -> Union[int, bool]:
@@ -323,6 +353,7 @@ class Step:
     """
     chapter_id: str
     chosen_text: Optional[str] = None
+    actions: List[Action] = field(default_factory=list)
 
 
 class BranchingNovelApp(tk.Tk):
@@ -568,7 +599,7 @@ class BranchingNovelApp(tk.Tk):
             self.history[self.current_index] = cur
 
         # 미래 히스토리 절단 후 다음 스텝 추가
-        next_step = Step(chapter_id=choice.target_id, chosen_text=None)
+        next_step = Step(chapter_id=choice.target_id, chosen_text=None, actions=list(choice.actions))
         if self.current_index < len(self.history) - 1:
             self.history = self.history[:self.current_index + 1]
         self._append_step(next_step, truncate_future=False)
@@ -603,22 +634,41 @@ class BranchingNovelApp(tk.Tk):
 
     def _compute_state(self, upto_index: int) -> Dict[str, Union[int, bool]]:
         state: Dict[str, Union[int, bool]] = dict(self.story.variables)
+        def apply(act: Action):
+            if act.op == "set":
+                state[act.var] = act.value
+                return
+            cur = state.get(act.var, 0)
+            if isinstance(cur, bool):
+                cur = int(cur)
+            val = act.value
+            if isinstance(val, bool):
+                val = int(val)
+            if act.op == "add":
+                cur += val
+            elif act.op == "sub":
+                cur -= val
+            elif act.op == "mul":
+                cur *= val
+            elif act.op == "div":
+                cur /= val
+            elif act.op == "floordiv":
+                cur //= val
+            elif act.op == "mod":
+                cur %= val
+            elif act.op == "pow":
+                cur **= val
+            state[act.var] = cur
+
         for i in range(0, upto_index + 1):
             step = self.history[i]
+            for act in getattr(step, 'actions', []):
+                apply(act)
             ch = self.story.get_chapter(step.chapter_id)
             if not ch:
                 continue
             for act in ch.actions:
-                if act.op == "set":
-                    state[act.var] = act.value
-                elif act.op == "add":
-                    cur = state.get(act.var, 0)
-                    if isinstance(cur, bool):
-                        cur = int(cur)
-                    val = act.value
-                    if isinstance(val, bool):
-                        val = int(val)
-                    state[act.var] = cur + val
+                apply(act)
         return state
 
     def _evaluate_condition(self, cond: str) -> bool:
@@ -666,8 +716,12 @@ class BranchingNovelApp(tk.Tk):
                 return left * right
             elif isinstance(node.op, ast.Div):
                 return left / right
+            elif isinstance(node.op, ast.FloorDiv):
+                return left // right
             elif isinstance(node.op, ast.Mod):
                 return left % right
+            elif isinstance(node.op, ast.Pow):
+                return left ** right
             else:
                 raise ValueError("Unsupported binary operator")
         elif isinstance(node, ast.Compare):

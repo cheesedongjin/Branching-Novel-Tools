@@ -48,10 +48,11 @@ class Choice:
     text: str
     target_id: str
     condition: Optional[str] = None
+    actions: List["Action"] = field(default_factory=list)
 
 @dataclass
 class Action:
-    op: str  # 'set' or 'add'
+    op: str  # 'set', 'add', 'sub', 'mul', 'div', 'floordiv', 'mod', 'pow'
     var: str
     value: Union[int, bool]
 
@@ -113,16 +114,45 @@ class Story:
                 pass
             # actions
             for act in ch.actions:
+                val = str(act.value).lower() if isinstance(act.value, bool) else act.value
                 if act.op == "set":
-                    lines.append(f"! set {act.var} = {act.value}")
+                    lines.append(f"! set {act.var} = {val}")
                 elif act.op == "add":
-                    lines.append(f"! add {act.var} += {act.value}")
+                    lines.append(f"! add {act.var} += {val}")
+                elif act.op == "sub":
+                    lines.append(f"! sub {act.var} -= {val}")
+                elif act.op == "mul":
+                    lines.append(f"! mul {act.var} *= {val}")
+                elif act.op == "div":
+                    lines.append(f"! div {act.var} /= {val}")
+                elif act.op == "floordiv":
+                    lines.append(f"! floordiv {act.var} //= {val}")
+                elif act.op == "mod":
+                    lines.append(f"! mod {act.var} %= {val}")
+                elif act.op == "pow":
+                    lines.append(f"! pow {act.var} **= {val}")
             # choices
             for c in ch.choices:
-                if c.condition:
-                    lines.append(f"* [{c.condition}] {c.text} -> {c.target_id}")
-                else:
-                    lines.append(f"* {c.text} -> {c.target_id}")
+                cond_part = f"[{c.condition}] " if c.condition else ""
+                act_part = ""
+                if c.actions:
+                    sym_map = {
+                        "set": "=",
+                        "add": "+=",
+                        "sub": "-=",
+                        "mul": "*=",
+                        "div": "/=",
+                        "floordiv": "//=",
+                        "mod": "%=",
+                        "pow": "**=",
+                    }
+                    act_strs = []
+                    for a in c.actions:
+                        val = str(a.value).lower() if isinstance(a.value, bool) else a.value
+                        op = sym_map.get(a.op, a.op)
+                        act_strs.append(f"{a.var} {op} {val}")
+                    act_part = "{" + "; ".join(act_strs) + "} "
+                lines.append(f"* {cond_part}{act_part}{c.text} -> {c.target_id}")
             lines.append("")  # blank line after chapter
         # trim trailing blanks
         while lines and lines[-1] == "":
@@ -237,33 +267,62 @@ class StoryParser:
         left, right = body.split("->", 1)
         left = left.strip()
         condition: Optional[str] = None
+        actions: List[Action] = []
         if left.startswith("["):
             end = left.find("]")
             if end == -1:
                 raise ParseError("Missing closing ']' in condition.")
             condition = left[1:end].strip()
+            left = left[end + 1:].strip()
+        if left.startswith("{"):
+            end = left.find("}")
+            if end == -1:
+                raise ParseError("Missing closing '}' in actions.")
+            act_block = left[1:end].strip()
+            actions = self._parse_actions_block(act_block)
             text = left[end + 1:].strip()
         else:
             text = left
         target = right.strip()
         if not text or not target:
             raise ParseError("Empty choice text or target.")
-        return Choice(text=text, target_id=target, condition=condition)
+        return Choice(text=text, target_id=target, condition=condition, actions=actions)
+
+    def _parse_actions_block(self, block: str) -> List[Action]:
+        acts: List[Action] = []
+        if not block:
+            return acts
+        parts = [p.strip() for p in block.split(';') if p.strip()]
+        for part in parts:
+            m = re.match(r"^(\w+)\s*(=|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)$", part)
+            if not m:
+                raise ParseError("Invalid action syntax.")
+            var, op, val = m.groups()
+            op_map = {
+                '=': 'set',
+                '+=': 'add',
+                '-=': 'sub',
+                '*=': 'mul',
+                '/=': 'div',
+                '//=': 'floordiv',
+                '%=': 'mod',
+                '**=': 'pow',
+            }
+            acts.append(Action(op=op_map[op], var=var, value=self._parse_value(val.strip())))
+        return acts
 
     def _parse_action(self, s: str) -> Action:
         content = s[1:].strip()
-        if content.startswith("set "):
-            rest = content[4:].strip()
-            if "=" not in rest:
-                raise ParseError("Invalid set syntax.")
-            var, val = rest.split("=", 1)
-            return Action(op="set", var=var.strip(), value=self._parse_value(val.strip()))
-        if content.startswith("add "):
-            rest = content[4:].strip()
-            if "+=" not in rest:
-                raise ParseError("Invalid add syntax.")
-            var, val = rest.split("+=", 1)
-            return Action(op="add", var=var.strip(), value=self._parse_value(val.strip()))
+        for key, sym in [
+            ("set", "="), ("add", "+="), ("sub", "-="), ("mul", "*="),
+            ("div", "/="), ("floordiv", "//="), ("mod", "%="), ("pow", "**=")
+        ]:
+            if content.startswith(f"{key} "):
+                rest = content[len(key)+1:].strip()
+                if sym not in rest:
+                    raise ParseError("Invalid action syntax.")
+                var, val = rest.split(sym, 1)
+                return Action(op=key, var=var.strip(), value=self._parse_value(val.strip()))
         raise ParseError("Unknown action command.")
 
     def _parse_value(self, token: str) -> Union[int, bool]:
@@ -280,12 +339,12 @@ class StoryParser:
 # ---------- 에디터 GUI ----------
 
 class ConditionRowDialog(tk.Toplevel):
-    def __init__(self, master, variables: List[str], initial: Optional[Tuple[str, str, str]]):
+    def __init__(self, master, variables: List[str], initial: Optional[Tuple[str, str, str, str]]):
         super().__init__(master)
-        self.title("조건")
+        self.title("조건/행동")
         self.resizable(False, False)
         self.result_ok = False
-        self.condition: Optional[Tuple[str, str, str]] = None
+        self.entry: Optional[Tuple[str, str, str, str]] = None
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
@@ -295,7 +354,7 @@ class ConditionRowDialog(tk.Toplevel):
         self.cmb_var.grid(row=1, column=0, sticky="ew", pady=(0,8))
 
         ttk.Label(frm, text="연산자").grid(row=0, column=1, sticky="w", padx=(8,0))
-        ops = ["==", "!=", ">", "<", ">=", "<="]
+        ops = ["==", "!=", ">", "<", ">=", "<=", "+", "-", "*", "/", "//", "%", "**", "="]
         self.cmb_op = ttk.Combobox(frm, values=ops, state="readonly", width=5)
         self.cmb_op.grid(row=1, column=1, sticky="w", padx=(8,0))
 
@@ -311,13 +370,16 @@ class ConditionRowDialog(tk.Toplevel):
         cancel.grid(row=0, column=1)
 
         if initial:
-            var, op, val = initial
+            kind, var, op, val = initial
             vals = list(self.cmb_var["values"])
             if var not in vals:
                 vals.append(var)
                 self.cmb_var["values"] = vals
             self.cmb_var.set(var)
-            self.cmb_op.set(op)
+            disp_op = op
+            if kind == "act" and op.endswith("=") and op != "=":
+                disp_op = op[:-1]
+            self.cmb_op.set(disp_op)
             self.ent_val.insert(0, val)
         else:
             if variables:
@@ -337,7 +399,14 @@ class ConditionRowDialog(tk.Toplevel):
         if not var or not op or not val:
             messagebox.showerror("오류", "변수, 연산자, 값을 모두 입력하세요.")
             return
-        self.condition = (var, op, val)
+        cond_ops = ["==", "!=", ">", "<", ">=", "<="]
+        if op in cond_ops:
+            kind = "cond"
+            final_op = op
+        else:
+            kind = "act"
+            final_op = op if op == "=" else op + "="
+        self.entry = (kind, var, final_op, val)
         self.result_ok = True
         self.destroy()
 
@@ -406,24 +475,40 @@ class VariableDialog(tk.Toplevel):
 
 
 class ConditionDialog(tk.Toplevel):
-    def __init__(self, master, variables: List[str], initial: str, story: Story):
+    def __init__(self, master, variables: List[str], initial: str, actions: List[Action], story: Story):
         super().__init__(master)
-        self.title("조건 편집")
+        self.title("조건/행동 편집")
         self.resizable(False, False)
         self.result_ok = False
         self.variables = variables
         self.story = story
         self.conditions: List[Tuple[str, str, str]] = self._parse_initial(initial)
+        sym_map = {
+            "set": "=",
+            "add": "+=",
+            "sub": "-=",
+            "mul": "*=",
+            "div": "/=",
+            "floordiv": "//=",
+            "mod": "%=",
+            "pow": "**=",
+        }
+        self.actions: List[Tuple[str, str, str]] = [
+            (a.var, sym_map.get(a.op, a.op), str(a.value).lower() if isinstance(a.value, bool) else str(a.value))
+            for a in actions
+        ]
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
         frm.rowconfigure(0, weight=1)
         frm.columnconfigure(0, weight=1)
 
-        self.tree = ttk.Treeview(frm, columns=("var", "op", "val"), show="headings", height=6)
+        self.tree = ttk.Treeview(frm, columns=("type", "var", "op", "val"), show="headings", height=6)
+        self.tree.heading("type", text="종류")
         self.tree.heading("var", text="변수")
         self.tree.heading("op", text="연산자")
         self.tree.heading("val", text="값")
+        self.tree.column("type", width=60, anchor="w")
         self.tree.column("var", width=100, anchor="w")
         self.tree.column("op", width=60, anchor="w")
         self.tree.column("val", width=120, anchor="w")
@@ -466,12 +551,18 @@ class ConditionDialog(tk.Toplevel):
         for i in self.tree.get_children():
             self.tree.delete(i)
         for var, op, val in self.conditions:
-            self.tree.insert("", tk.END, values=(var, op, val))
+            self.tree.insert("", tk.END, values=("조건", var, op, val))
+        for var, op, val in self.actions:
+            self.tree.insert("", tk.END, values=("행동", var, op, val))
 
     def _add(self):
         dlg = ConditionRowDialog(self, self.variables, None)
-        if dlg.result_ok and dlg.condition:
-            self.conditions.append(dlg.condition)
+        if dlg.result_ok and dlg.entry:
+            kind, var, op, val = dlg.entry
+            if kind == "cond":
+                self.conditions.append((var, op, val))
+            else:
+                self.actions.append((var, op, val))
             self._refresh_tree()
 
     def _edit(self):
@@ -479,17 +570,31 @@ class ConditionDialog(tk.Toplevel):
         if not sel:
             return
         idx = self.tree.index(sel[0])
-        dlg = ConditionRowDialog(self, self.variables, self.conditions[idx])
-        if dlg.result_ok and dlg.condition:
-            self.conditions[idx] = dlg.condition
-            self._refresh_tree()
+        if idx < len(self.conditions):
+            init = ("cond",) + self.conditions[idx]
+            dlg = ConditionRowDialog(self, self.variables, init)
+            if dlg.result_ok and dlg.entry:
+                _, var, op, val = dlg.entry
+                self.conditions[idx] = (var, op, val)
+                self._refresh_tree()
+        else:
+            aidx = idx - len(self.conditions)
+            init = ("act",) + self.actions[aidx]
+            dlg = ConditionRowDialog(self, self.variables, init)
+            if dlg.result_ok and dlg.entry:
+                _, var, op, val = dlg.entry
+                self.actions[aidx] = (var, op, val)
+                self._refresh_tree()
 
     def _delete(self):
         sel = self.tree.selection()
         if not sel:
             return
         idx = self.tree.index(sel[0])
-        self.conditions.pop(idx)
+        if idx < len(self.conditions):
+            self.conditions.pop(idx)
+        else:
+            self.actions.pop(idx - len(self.conditions))
         self._refresh_tree()
 
     def _add_variable(self):
@@ -504,6 +609,33 @@ class ConditionDialog(tk.Toplevel):
 
     def _ok(self):
         self.condition_str = " and ".join(f"{v} {op} {val}" for v, op, val in self.conditions)
+        op_map = {
+            '=': 'set',
+            '+=': 'add',
+            '-=': 'sub',
+            '*=': 'mul',
+            '/=': 'div',
+            '//=': 'floordiv',
+            '%=': 'mod',
+            '**=': 'pow',
+        }
+        def parse_val(t: str) -> Union[int, bool]:
+            tl = t.lower()
+            if tl == 'true':
+                return True
+            if tl == 'false':
+                return False
+            try:
+                return int(t)
+            except ValueError:
+                return 0
+        self.action_list = [Action(op=op_map[op], var=v, value=parse_val(val)) for v, op, val in self.actions]
+        parts = []
+        if self.condition_str:
+            parts.append(self.condition_str)
+        if self.actions:
+            parts.append("; ".join(f"{v} {op} {val}" for v, op, val in self.actions))
+        self.display_str = " | ".join(parts)
         self.result_ok = True
         self.destroy()
 
@@ -520,6 +652,8 @@ class ChoiceEditor(tk.Toplevel):
         self.choice: Optional[Choice] = None
         self.result_ok = False
         self.variables = variables
+        self.condition_str: str = ""
+        self.choice_actions: List[Action] = []
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
@@ -532,7 +666,7 @@ class ChoiceEditor(tk.Toplevel):
         self.cmb_target = ttk.Combobox(frm, values=chapter_ids, state="readonly", width=30)
         self.cmb_target.grid(row=3, column=0, sticky="w")
 
-        ttk.Label(frm, text="조건식").grid(row=4, column=0, sticky="w")
+        ttk.Label(frm, text="조건/행동식").grid(row=4, column=0, sticky="w")
         cond_frame = ttk.Frame(frm)
         cond_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0,8))
         cond_frame.columnconfigure(0, weight=1)
@@ -554,10 +688,31 @@ class ChoiceEditor(tk.Toplevel):
                 vals.append(choice.target_id)
                 self.cmb_target["values"] = vals
             self.cmb_target.set(choice.target_id)
-            if choice.condition:
+            self.condition_str = choice.condition or ""
+            self.choice_actions = list(choice.actions)
+            display = []
+            if self.condition_str:
+                display.append(self.condition_str)
+            if self.choice_actions:
+                sym_map = {
+                    "set": "=",
+                    "add": "+=",
+                    "sub": "-=",
+                    "mul": "*=",
+                    "div": "/=",
+                    "floordiv": "//=",
+                    "mod": "%=",
+                    "pow": "**=",
+                }
+                act_strs = [
+                    f"{a.var} {sym_map.get(a.op, a.op)} {a.value}"
+                    for a in self.choice_actions
+                ]
+                display.append("; ".join(act_strs))
+            if display:
                 self.ent_cond.configure(state="normal")
                 self.ent_cond.delete(0, tk.END)
-                self.ent_cond.insert(0, choice.condition)
+                self.ent_cond.insert(0, " | ".join(display))
                 self.ent_cond.configure(state="readonly")
         else:
             if chapter_ids:
@@ -572,8 +727,7 @@ class ChoiceEditor(tk.Toplevel):
     def _ok(self):
         text = self.ent_text.get().strip()
         target = self.cmb_target.get().strip()
-        cond = self.ent_cond.get().strip()
-        cond = re.sub(r"\btrue\b", "1", cond, flags=re.IGNORECASE)
+        cond = re.sub(r"\btrue\b", "1", self.condition_str, flags=re.IGNORECASE)
         cond = re.sub(r"\bfalse\b", "0", cond, flags=re.IGNORECASE)
         if not text:
             messagebox.showerror("오류", "버튼 문구를 입력하세요.")
@@ -581,7 +735,7 @@ class ChoiceEditor(tk.Toplevel):
         if not target:
             messagebox.showerror("오류", "이동 타깃 챕터 ID를 선택하세요.")
             return
-        self.choice = Choice(text=text, target_id=target, condition=(cond or None))
+        self.choice = Choice(text=text, target_id=target, condition=(cond or None), actions=self.choice_actions)
         self.result_ok = True
         self.destroy()
 
@@ -590,11 +744,13 @@ class ChoiceEditor(tk.Toplevel):
         self.destroy()
 
     def _open_cond_editor(self):
-        dlg = ConditionDialog(self, self.variables, self.ent_cond.get().strip(), self.master.story)
+        dlg = ConditionDialog(self, self.variables, self.condition_str, self.choice_actions, self.master.story)
         if dlg.result_ok:
+            self.condition_str = dlg.condition_str
+            self.choice_actions = dlg.action_list
             self.ent_cond.configure(state="normal")
             self.ent_cond.delete(0, tk.END)
-            self.ent_cond.insert(0, dlg.condition_str)
+            self.ent_cond.insert(0, dlg.display_str)
             self.ent_cond.configure(state="readonly")
             self.variables = sorted(set(self.variables) | set(self.master.story.variables.keys()))
 
@@ -995,6 +1151,9 @@ class ChapterEditor(tk.Tk):
         for ch in self.story.chapters.values():
             for act in ch.actions:
                 vars_set.add(act.var)
+            for choice in ch.choices:
+                for act in choice.actions:
+                    vars_set.add(act.var)
         return sorted(vars_set)
 
     def _add_choice(self):
@@ -1188,18 +1347,35 @@ class ChapterEditor(tk.Tk):
         state: Dict[str, Union[int, bool]] = {}
         current: Optional[Chapter] = None
 
+        def apply_action(act: Action):
+            if act.op == "set":
+                state[act.var] = act.value
+                return
+            cur = state.get(act.var, 0)
+            if isinstance(cur, bool):
+                cur = int(cur)
+            val = act.value
+            if isinstance(val, bool):
+                val = int(val)
+            if act.op == "add":
+                cur += val
+            elif act.op == "sub":
+                cur -= val
+            elif act.op == "mul":
+                cur *= val
+            elif act.op == "div":
+                cur /= val
+            elif act.op == "floordiv":
+                cur //= val
+            elif act.op == "mod":
+                cur %= val
+            elif act.op == "pow":
+                cur **= val
+            state[act.var] = cur
+
         def apply_actions(ch: Chapter):
             for act in ch.actions:
-                if act.op == "set":
-                    state[act.var] = act.value
-                elif act.op == "add":
-                    cur = state.get(act.var, 0)
-                    if isinstance(cur, bool):
-                        cur = int(cur)
-                    val = act.value
-                    if isinstance(val, bool):
-                        val = int(val)
-                    state[act.var] = cur + val
+                apply_action(act)
 
         def eval_cond(cond: str) -> bool:
             expr = re.sub(r"\btrue\b", "True", cond, flags=re.IGNORECASE)
@@ -1259,6 +1435,8 @@ class ChapterEditor(tk.Tk):
                 ttk.Button(btn_frame, text="닫기", command=win.destroy).pack(pady=2)
 
         def choose(choice: Choice):
+            for act in choice.actions:
+                apply_action(act)
             show(choice.target_id)
 
         start = self.story.start_id or next(iter(self.story.chapters.keys()), None)
