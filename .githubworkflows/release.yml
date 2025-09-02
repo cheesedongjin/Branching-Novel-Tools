@@ -36,6 +36,17 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Resolve tag
+        id: rtag
+        shell: bash
+        run: |
+          tag="${GITHUB_REF##refs/tags/}"
+          [ -z "$tag" ] && tag="${{ github.event.ref }}"
+          [ -z "$tag" ] && tag="${{ github.ref_name }}"
+          version="${tag#v}"
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+          echo "version=$version" >> $GITHUB_OUTPUT
+
       - name: Install deps
         shell: pwsh
         run: |
@@ -78,18 +89,16 @@ jobs:
       - name: Package ZIPs + latest.* for online installers
         shell: pwsh
         run: |
-          $version = "${env:GITHUB_REF_NAME}"
-          if ($version.StartsWith("refs/tags/")) { $version = $version.Substring(10) }
-          if ($version.StartsWith("v")) { $version = $version.Substring(1) }
+          $ver='${{ steps.rtag.outputs.version }}'
           New-Item -ItemType Directory -Force -Path release | Out-Null
 
-          $ezip = "release/${env:EDITOR_APPNAME}-$version-windows-x64.zip"
+          $ezip = "release/${env:EDITOR_APPNAME}-$ver-windows-x64.zip"
           Compress-Archive -Path "dist/${env:EDITOR_APPNAME}/*" -DestinationPath $ezip
           Copy-Item $ezip "release/latest-editor.zip" -Force
           $eh = (Get-FileHash "release/latest-editor.zip" -Algorithm SHA256).Hash.ToLower()
           "$eh  latest-editor.zip" | Out-File -Encoding ascii "release/latest-editor.sha256"
 
-          $vzip = "release/${env:VIEWER_APPNAME}-$version-windows-x64.zip"
+          $vzip = "release/${env:VIEWER_APPNAME}-$ver-windows-x64.zip"
           Compress-Archive -Path "dist/${env:VIEWER_APPNAME}/*" -DestinationPath $vzip
           Copy-Item $vzip "release/latest-viewer.zip" -Force
           $vh = (Get-FileHash "release/latest-viewer.zip" -Algorithm SHA256).Hash.ToLower()
@@ -108,6 +117,16 @@ jobs:
     if: always()
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve tag
+        id: rtag
+        shell: bash
+        run: |
+          tag="${GITHUB_REF##refs/tags/}"
+          [ -z "$tag" ] && tag="${{ github.event.ref }}"
+          [ -z "$tag" ] && tag="${{ github.ref_name }}"
+          version="${tag#v}"
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+          echo "version=$version" >> $GITHUB_OUTPUT
       - name: Download windows artifacts
         uses: actions/download-artifact@v4
         with:
@@ -125,9 +144,7 @@ jobs:
         if: ${{ hashFiles('release/latest-editor.zip') != '' && hashFiles('installer.iss') != '' }}
         run: |
           $ownerRepo = "${env:GITHUB_REPOSITORY}"
-          $version = "${env:GITHUB_REF_NAME}"
-          if ($version.StartsWith("refs/tags/")) { $version = $version.Substring(10) }
-          if ($version.StartsWith("v")) { $version = $version.Substring(1) }
+          $version='${{ steps.rtag.outputs.version }}'
           $zipURL = "https://github.com/$ownerRepo/releases/latest/download/latest-editor.zip"
           $shaURL = "https://github.com/$ownerRepo/releases/latest/download/latest-editor.sha256"
           iscc /DMyAppName="${env:EDITOR_APPNAME}" /DMyAppVersion="$version" /DMyAppExe="${env:EDITOR_EXE}" /DPayloadZipURL="$zipURL" /DPayloadShaURL="$shaURL" installer.iss
@@ -139,9 +156,7 @@ jobs:
         if: ${{ hashFiles('release/latest-viewer.zip') != '' && hashFiles('installer.iss') != '' }}
         run: |
           $ownerRepo = "${env:GITHUB_REPOSITORY}"
-          $version = "${env:GITHUB_REF_NAME}"
-          if ($version.StartsWith("refs/tags/")) { $version = $version.Substring(10) }
-          if ($version.StartsWith("v")) { $version = $version.Substring(1) }
+          $version='${{ steps.rtag.outputs.version }}'
           $zipURL = "https://github.com/$ownerRepo/releases/latest/download/latest-viewer.zip"
           $shaURL = "https://github.com/$ownerRepo/releases/latest/download/latest-viewer.sha256"
           iscc /DMyAppName="${env:VIEWER_APPNAME}" /DMyAppVersion="$version" /DMyAppExe="${env:VIEWER_EXE}" /DPayloadZipURL="$zipURL" /DPayloadShaURL="$shaURL" installer.iss
@@ -166,6 +181,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve tag
+        id: rtag
+        shell: bash
+        run: |
+          tag="${GITHUB_REF##refs/tags/}"
+          [ -z "$tag" ] && tag="${{ github.event.ref }}"
+          [ -z "$tag" ] && tag="${{ github.ref_name }}"
+          version="${tag#v}"
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+          echo "version=$version" >> $GITHUB_OUTPUT
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
@@ -174,13 +199,13 @@ jobs:
       - name: Build Editor
         run: |
           pyinstaller -F --windowed -n "$EDITOR_APPNAME" "$EDITOR_ENTRY"
-          v="${GITHUB_REF_NAME#refs/tags/}"; v="${v#v}"
+          v='${{ steps.rtag.outputs.version }}'
           mkdir -p release
           zip -j "release/${EDITOR_APPNAME}-${v}-macos.zip" "dist/${EDITOR_APPNAME}"
       - name: Build Viewer
         run: |
           pyinstaller -F --windowed -n "$VIEWER_APPNAME" "$VIEWER_ENTRY"
-          v="${GITHUB_REF_NAME#refs/tags/}"; v="${v#v}"
+          v='${{ steps.rtag.outputs.version }}'
           zip -j "release/${VIEWER_APPNAME}-${v}-macos.zip" "dist/${VIEWER_APPNAME}"
       - name: Upload mac artifacts
         uses: actions/upload-artifact@v4
@@ -200,6 +225,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env:PYPYTHON_VERSION || env.PYTHON_VERSION }}
+      - name: Resolve tag
+        id: rtag
+        shell: bash
+        run: |
+          tag="${GITHUB_REF##refs/tags/}"
+          [ -z "$tag" ] && tag="${{ github.event.ref }}"
+          [ -z "$tag" ] && tag="${{ github.ref_name }}"
+          version="${tag#v}"
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+          echo "version=$version" >> $GITHUB_OUTPUT
       - name: Install Tk + deps
         run: |
           sudo apt-get update
@@ -210,13 +245,13 @@ jobs:
       - name: Build Editor
         run: |
           pyinstaller -F -n branching-novel-editor "$EDITOR_ENTRY"
-          v="${GITHUB_REF_NAME#refs/tags/}"; v="${v#v}"
+          v='${{ steps.rtag.outputs.version }}'
           mkdir -p release
           zip -j "release/branching-novel-editor-${v}-linux-x64.zip" "dist/branching-novel-editor"
       - name: Build Viewer
         run: |
           pyinstaller -F -n branching-novel-gui "$VIEWER_ENTRY"
-          v="${GITHUB_REF_NAME#refs/tags/}"; v="${v#v}"
+          v='${{ steps.rtag.outputs.version }}'
           zip -j "release/branching-novel-gui-${v}-linux-x64.zip" "dist/branching-novel-gui"
       - name: Upload linux artifacts
         uses: actions/upload-artifact@v4
@@ -230,12 +265,23 @@ jobs:
     needs: [build-windows, build-inno-installers, build-macos, build-linux]
     if: always()
     steps:
-      - name: Download all artifacts (whatever succeeded)
+      - uses: actions/checkout@v4
+      - name: Resolve tag
+        id: rtag
+        shell: bash
+        run: |
+          tag="${GITHUB_REF##refs/tags/}"
+          [ -z "$tag" ] && tag="${{ github.event.ref }}"
+          [ -z "$tag" ] && tag="${{ github.ref_name }}"
+          version="${tag#v}"
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+          echo "version=$version" >> $GITHUB_OUTPUT
+      - name: Download artifacts (any)
         uses: actions/download-artifact@v4
         with:
-          pattern: "*-artifacts|windows-installers|windows-artifacts"
-          merge-multiple: true
           path: release
+          pattern: "*"
+          merge-multiple: true
 
       - name: Generate SHA256SUMS (if any zips)
         run: |
@@ -248,8 +294,9 @@ jobs:
           cd ..
 
       - name: Compose Release Notes
+        shell: bash
         run: |
-          V="${GITHUB_REF_NAME#refs/tags/}"; V="${V#v}"
+          v='${{ steps.rtag.outputs.version }}'
           cat > RELEASE_BODY.md <<'EOF'
           # Branching Novel Tools — Release __V__
 
@@ -269,22 +316,20 @@ jobs:
           ## Checksums
           See `SHA256SUMS.txt`.
           EOF
-          sed -i "s/__V__/${V}/g" RELEASE_BODY.md
+          sed -i "s/__V__/${v}/g" RELEASE_BODY.md
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
+          name: ${{ steps.rtag.outputs.tag }}
+          tag_name: ${{ steps.rtag.outputs.tag }}
           body_path: RELEASE_BODY.md
           files: |
             release/*.zip
             release/*Setup.exe
-            release/latest-editor.zip
-            release/latest-editor.sha256
-            release/latest-viewer.zip
-            release/latest-viewer.sha256
             release/SHA256SUMS.txt
           make_latest: true
           draft: false
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
