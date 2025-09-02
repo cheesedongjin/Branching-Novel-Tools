@@ -442,7 +442,7 @@ class BranchingNovelApp(tk.Tk):
         btn_frame = ttk.Frame(nav_frame)
         btn_frame.grid(row=0, column=1, rowspan=2, sticky="e")
 
-        self.btn_home = ttk.Button(btn_frame, text="처음부터", command=self._reset_to_start)
+        self.btn_home = ttk.Button(btn_frame, text="처음부터", command=self._confirm_reset)
         self.btn_home.grid(row=0, column=0, padx=4)
         ttk.Label(btn_frame, text="← →").grid(row=0, column=1, padx=4)
 
@@ -489,6 +489,12 @@ class BranchingNovelApp(tk.Tk):
         if self.chapter_page_index < len(self.chapter_positions) - 1:
             self.chapter_page_index += 1
             self._render_page(self.chapter_page_index)
+
+    def _confirm_reset(self):
+        if messagebox.askyesno(
+            "경고", "지금까지의 진행 상황이 사라집니다.\n처음부터 다시 시작하시겠습니까?"
+        ):
+            self._reset_to_start()
 
     def _reset_to_start(self):
         self.history.clear()
