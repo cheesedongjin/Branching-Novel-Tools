@@ -758,7 +758,6 @@ class ChapterEditor(tk.Tk):
     def _build_ui(self):
         # 좌: 메타 + 챕터 리스트, 우: 챕터 편집 + 선택지 + 미리보기
         root = ttk.Frame(self, padding=8)
-        root.pack(fill="both", expand=True)
 
         root.columnconfigure(0, weight=0)
         root.columnconfigure(1, weight=1)
@@ -941,12 +940,14 @@ class ChapterEditor(tk.Tk):
 
         # 하단 버튼 바
         bottom = ttk.Frame(self)
-        bottom.pack(fill="x", padx=8, pady=(0,8))
+        bottom.pack(side="bottom", fill="x", padx=8, pady=(0,8))
         ttk.Button(bottom, text="유효성 검사", command=self._validate_story).pack(side="left")
         ttk.Button(bottom, text="저장", command=self._save_file).pack(side="right")
         ttk.Button(bottom, text="미리보기 반영", command=self._apply_preview_to_model).pack(side="right", padx=(0,6))
         ttk.Button(bottom, text="미리보기 갱신", command=self._update_preview).pack(side="right", padx=(0,6))
         ttk.Button(bottom, text="미리보기 실행", command=self._run_preview).pack(side="right", padx=(0,6))
+
+        root.pack(fill="both", expand=True)
 
     # ---------- 핸들러 ----------
     def _on_title_changed(self):
