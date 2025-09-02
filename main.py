@@ -532,15 +532,14 @@ class BranchingNovelApp(tk.Tk):
             self._record_visit(br.chapter_id)
         self._update_nav_buttons()
 
-    def _record_visit(self, branch_id: str):
-        br = self.story.get_branch(branch_id)
-        if not br:
+    def _record_visit(self, chapter_id: str):
+        # chapter_id를 직접 받아 목록에 추가/선택한다.
+        if not chapter_id:
             return
-        cid = br.chapter_id
-        if cid not in self.visited_chapters:
-            self.visited_chapters.append(cid)
+        if chapter_id not in self.visited_chapters:
+            self.visited_chapters.append(chapter_id)
             self._populate_chapter_list()
-        self._select_chapter_in_list(cid)
+        self._select_chapter_in_list(chapter_id)
 
     def _render_page(self, page_index: int):
         if not self.chapter_positions:
