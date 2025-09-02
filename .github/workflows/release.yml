@@ -328,6 +328,7 @@ jobs:
           body_path: RELEASE_BODY.md
           files: |
             release/*.zip
+            release/*.sha256
             release/*Setup.exe
             release/SHA256SUMS.txt
           make_latest: true
