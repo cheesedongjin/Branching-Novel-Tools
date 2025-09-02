@@ -1543,6 +1543,8 @@ class ChapterEditor(tk.Tk):
         self.ent_title.delete(0, tk.END)
         self.ent_title.insert(0, self.story.title)
         self._refresh_chapter_list()
+        # 미리보기에서 변경된 메타데이터를 반영
+        self._refresh_meta_panel()
         if self.current_chapter_id:
             self._load_chapter_to_form(self.current_chapter_id)
             if self.current_branch_id:
@@ -1551,6 +1553,8 @@ class ChapterEditor(tk.Tk):
             self.txt_body.delete("1.0", tk.END)
             for i in self.tree_choices.get_children():
                 self.tree_choices.delete(i)
+        # 미리보기 텍스트의 수정 플래그 초기화
+        self.txt_preview.edit_modified(False)
         self.preview_modified = False
         return True
 
