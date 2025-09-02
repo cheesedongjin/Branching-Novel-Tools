@@ -901,7 +901,6 @@ def load_text_from_file(path: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Branching Novel GUI")
     parser.add_argument("file", nargs="?", help="Story file path (.bnov)")
-    parser.add_argument("--show-disabled", action="store_true", help="Show unavailable choices as disabled")
     args = parser.parse_args()
 
     file_path = args.file
@@ -932,7 +931,7 @@ def main():
         messagebox.showerror("오류", f"파일을 읽는 중 오류가 발생했습니다:\n{e}")
         sys.exit(1)
 
-    app = BranchingNovelApp(story, file_path, show_disabled=args.show_disabled or story.show_disabled)
+    app = BranchingNovelApp(story, file_path, show_disabled=story.show_disabled)
     app.mainloop()
 
 
