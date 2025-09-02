@@ -185,6 +185,9 @@ class StoryParser:
             stripped = line.strip()
             i += 1
 
+            if stripped.startswith(("@title:", "@start:", "@ending:")):
+                continue
+
             if stripped.startswith("@chapter"):
                 current_branch = None
                 current_chapter = self._parse_chapter_decl(stripped)
@@ -1418,7 +1421,7 @@ class ChapterEditor(tk.Tk):
     def _build_find_results(self, query: str, scope: str):
         self._apply_body_to_model()
         results: List[Tuple[str, int]] = []
-        if scope == "chapter" and self.current_branch_id:
+        if scope == "branch" and self.current_branch_id:
             br = self.story.branches[self.current_branch_id]
             text = "\n\n".join(br.paragraphs)
             idx = text.find(query)
