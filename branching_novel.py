@@ -857,10 +857,10 @@ class BranchingNovelApp(tk.Tk):
                     out.append('!=')
                     i += 2
                 else:
+                    # 식의 맨 앞에서 공백이 생겨도 strip으로 제거
                     out.append(' not ')
                     i += 1
             elif ch == '&':
-                # '&&' → ' and ', 단일 '&'도 허용
                 if i + 1 < len(s) and s[i + 1] == '&':
                     out.append(' and ')
                     i += 2
@@ -868,7 +868,6 @@ class BranchingNovelApp(tk.Tk):
                     out.append(' and ')
                     i += 1
             elif ch == '|':
-                # '||' → ' or ', 단일 '|'도 허용
                 if i + 1 < len(s) and s[i + 1] == '|':
                     out.append(' or ')
                     i += 2
@@ -884,7 +883,9 @@ class BranchingNovelApp(tk.Tk):
         # true/false 대소문자 혼용 대응
         expr = re.sub(r"\btrue\b", "True", expr, flags=re.IGNORECASE)
         expr = re.sub(r"\bfalse\b", "False", expr, flags=re.IGNORECASE)
-        return expr
+
+        # ★ 핵심 수정: 선행/후행 공백 제거로 IndentationError 방지
+        return expr.strip()
 
 
 def load_text_from_file(path: str) -> str:
