@@ -706,8 +706,6 @@ class ChapterEditor(tk.Tk):
         self.current_branch_id: Optional[str] = br_id
         self.current_file: Optional[str] = None
         self.dirty: bool = False
-        self.preview_modified: bool = False
-        self._preview_updating: bool = False
 
         self._build_menu()
         self._build_ui()
@@ -921,20 +919,14 @@ class ChapterEditor(tk.Tk):
         preview_tab.rowconfigure(0, weight=1)
         preview_tab.columnconfigure(0, weight=1)
 
-        self.txt_preview = tk.Text(
-            preview_tab,
-            wrap="none",
-            font=("Consolas", 11) if sys.platform.startswith("win") else ("Menlo", 11),
-            undo=True,
-        )
+        self.txt_preview = tk.Text(preview_tab, wrap="none", state="disabled",
+                                   font=("Consolas", 11) if sys.platform.startswith("win") else ("Menlo", 11))
         self.txt_preview.grid(row=0, column=0, sticky="nsew")
         pvx = ttk.Scrollbar(preview_tab, orient="horizontal", command=self.txt_preview.xview)
         pvy = ttk.Scrollbar(preview_tab, orient="vertical", command=self.txt_preview.yview)
         pvx.grid(row=1, column=0, sticky="ew")
         pvy.grid(row=0, column=1, sticky="ns")
         self.txt_preview.configure(xscrollcommand=pvx.set, yscrollcommand=pvy.set)
-        self.txt_preview.bind("<<Modified>>", self._on_preview_modified)
-        self.txt_preview.edit_modified(False)
 
         # 찾기/변경은 새 창에서 열림
         self.find_win = None
@@ -944,7 +936,6 @@ class ChapterEditor(tk.Tk):
         bottom.pack(fill="x", padx=8, pady=(0,8))
         ttk.Button(bottom, text="유효성 검사", command=self._validate_story).pack(side="left")
         ttk.Button(bottom, text="저장", command=self._save_file).pack(side="right")
-        ttk.Button(bottom, text="미리보기 반영", command=self._apply_preview_to_model).pack(side="right", padx=(0,6))
         ttk.Button(bottom, text="미리보기 갱신", command=self._update_preview).pack(side="right", padx=(0,6))
         ttk.Button(bottom, text="미리보기 실행", command=self._run_preview).pack(side="right", padx=(0,6))
 
@@ -994,13 +985,6 @@ class ChapterEditor(tk.Tk):
             self._set_dirty(True)
             self._apply_body_to_model()
             self._update_preview()
-
-    def _on_preview_modified(self, evt):
-        if self.txt_preview.edit_modified():
-            self.txt_preview.edit_modified(False)
-            if not self._preview_updating:
-                self.preview_modified = True
-                self._set_dirty(True)
 
     # ---------- 상호작용 ----------
     def _load_chapter_to_form(self, cid: str):
@@ -1493,47 +1477,13 @@ class ChapterEditor(tk.Tk):
     def _update_preview(self):
         self._apply_body_to_model()
         txt = self.story.serialize()
-        self._preview_updating = True
+        self.txt_preview.config(state="normal")
         self.txt_preview.delete("1.0", tk.END)
         self.txt_preview.insert(tk.END, txt)
-        self.txt_preview.edit_modified(False)
-        self._preview_updating = False
-        self.preview_modified = False
-
-    def _apply_preview_to_model(self) -> bool:
-        if not self.preview_modified:
-            return True
-        txt = self.txt_preview.get("1.0", tk.END)
-        parser = StoryParser()
-        try:
-            story = parser.parse(txt)
-        except ParseError as e:
-            messagebox.showerror("파싱 오류", str(e))
-            return False
-        self.story = story
-        self.current_branch_id = story.start_id
-        br = self.story.get_branch(self.current_branch_id) if self.current_branch_id else None
-        self.current_chapter_id = (
-            br.chapter_id if br else (next(iter(self.story.chapters.keys())) if self.story.chapters else None)
-        )
-        self.ent_title.delete(0, tk.END)
-        self.ent_title.insert(0, self.story.title)
-        self._refresh_chapter_list()
-        if self.current_chapter_id:
-            self._load_chapter_to_form(self.current_chapter_id)
-            if self.current_branch_id:
-                self._load_branch_to_form(self.current_branch_id)
-        else:
-            self.txt_body.delete("1.0", tk.END)
-            for i in self.tree_choices.get_children():
-                self.tree_choices.delete(i)
-        self.preview_modified = False
-        return True
+        self.txt_preview.config(state="disabled")
 
     def _run_preview(self):
         """main.py의 실행기를 이용하여 현재 스토리를 실행한다."""
-        if not self._apply_preview_to_model():
-            return
         self._apply_body_to_model()
 
         import copy
@@ -1545,9 +1495,6 @@ class ChapterEditor(tk.Tk):
         app.mainloop()
 
     def _validate_story(self):
-        if not self._apply_preview_to_model():
-            return
-        self._apply_body_to_model()
         errors = []
         warnings = []
 
@@ -1647,10 +1594,7 @@ class ChapterEditor(tk.Tk):
 
     def _save_file(self):
         if self.current_file is None:
-            self._save_file_as()
-            return
-        if not self._apply_preview_to_model():
-            return
+            return self._save_file_as()
         self._apply_body_to_model()
         txt = self.story.serialize()
         try:
@@ -1663,8 +1607,6 @@ class ChapterEditor(tk.Tk):
         messagebox.showinfo("저장", "저장 완료.")
 
     def _save_file_as(self):
-        if not self._apply_preview_to_model():
-            return
         self._apply_body_to_model()
         path = filedialog.asksaveasfilename(
             title="다른 이름으로 저장",
