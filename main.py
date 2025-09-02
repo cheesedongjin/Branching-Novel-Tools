@@ -100,21 +100,37 @@ class Action:
 
 
 @dataclass
-class Chapter:
-    chapter_id: str
+class Branch:
+    """기존 챕터에 해당하는 세부 분기"""
+
+    branch_id: str
     title: str
+    chapter_id: str = ""
     paragraphs: List[str] = field(default_factory=list)
     choices: List[Choice] = field(default_factory=list)
     actions: List[Action] = field(default_factory=list)
 
 
 @dataclass
+class Chapter:
+    """여러 분기(Branch)를 담는 상위 단위"""
+
+    chapter_id: str
+    title: str
+    branches: Dict[str, Branch] = field(default_factory=dict)
+
+
+@dataclass
 class Story:
     title: str = "Untitled"
-    start_id: Optional[str] = None
+    start_id: Optional[str] = None  # 시작 분기 ID
     ending_text: str = "The End"
     chapters: Dict[str, Chapter] = field(default_factory=dict)
+    branches: Dict[str, Branch] = field(default_factory=dict)
     variables: Dict[str, Union[int, float, bool]] = field(default_factory=dict)
+
+    def get_branch(self, bid: str) -> Optional[Branch]:
+        return self.branches.get(bid)
 
     def get_chapter(self, cid: str) -> Optional[Chapter]:
         return self.chapters.get(cid)
@@ -137,6 +153,7 @@ class StoryParser:
         lines = [ln.lstrip("\ufeff") for ln in text.splitlines()]
         story = Story()
         current_chapter: Optional[Chapter] = None
+        current_branch: Optional[Branch] = None
         paragraph_buffer: List[str] = []
 
         # 메타데이터 임시 저장
@@ -162,71 +179,75 @@ class StoryParser:
             stripped = line.strip()
             i += 1
 
-            if stripped.startswith("@"):
-                continue
-
-            # 챕터 시작
-            if stripped.startswith("#"):
-                # 기존 챕터의 미처 플러시하지 않은 문단을 반영
-                if current_chapter is not None and paragraph_buffer:
-                    # 빈 줄을 기준으로 문단을 이미 나누므로, 여기서는 합쳐진 버퍼를 문단 하나로 처리
-                    merged = self._merge_paragraph_buffer(paragraph_buffer)
-                    current_chapter.paragraphs.extend(merged)
-                    paragraph_buffer.clear()
-
-                current_chapter = self._parse_chapter_header(stripped)
+            if stripped.startswith("@chapter"):
+                # 챕터 선언
+                current_branch = None
+                current_chapter = self._parse_chapter_decl(stripped)
                 if current_chapter.chapter_id in story.chapters:
                     raise ParseError(f"Duplicate chapter id: {current_chapter.chapter_id}")
                 story.chapters[current_chapter.chapter_id] = current_chapter
                 continue
 
+            # 분기 시작
+            if stripped.startswith("#"):
+                if current_chapter is None:
+                    raise ParseError("Branch defined outside of a chapter.")
+                if current_branch is not None and paragraph_buffer:
+                    merged = self._merge_paragraph_buffer(paragraph_buffer)
+                    current_branch.paragraphs.extend(merged)
+                    paragraph_buffer.clear()
+
+                current_branch = self._parse_branch_header(stripped, current_chapter.chapter_id)
+                if current_branch.branch_id in story.branches:
+                    raise ParseError(f"Duplicate branch id: {current_branch.branch_id}")
+                story.branches[current_branch.branch_id] = current_branch
+                current_chapter.branches[current_branch.branch_id] = current_branch
+                continue
+
             # 빈 줄은 문단 경계로 처리
             if stripped == "":
-                if current_chapter is not None:
-                    # 문단 버퍼를 문단으로 저장
+                if current_branch is not None:
                     merged = self._merge_paragraph_buffer(paragraph_buffer)
-                    current_chapter.paragraphs.extend(merged)
+                    current_branch.paragraphs.extend(merged)
                     paragraph_buffer.clear()
                 continue
 
             # 상태 변경 지시문
             if stripped.startswith("!"):
                 action = self._parse_action_line(stripped)
-                if current_chapter is None:
+                if current_branch is None:
                     if action.op != "set":
-                        raise ParseError("State change found outside of any chapter.")
+                        raise ParseError("State change found outside of any branch.")
                     story.variables[action.var] = action.value
                 else:
-                    current_chapter.actions.append(action)
+                    current_branch.actions.append(action)
                 continue
 
             # 선택지 라인
             if stripped.startswith("* "):
-                if current_chapter is None:
-                    raise ParseError("Choice found outside of any chapter.")
+                if current_branch is None:
+                    raise ParseError("Choice found outside of any branch.")
                 choice = self._parse_choice_line(stripped)
-                current_chapter.choices.append(choice)
+                current_branch.choices.append(choice)
                 continue
 
             # 일반 본문 라인
-            if current_chapter is None:
-                # 챕터 외부 본문은 무시 또는 오류 처리 가능
-                # 여기서는 오류로 간주
-                raise ParseError("Found narrative text outside of a chapter. Add a chapter header starting with '#'.")
+            if current_branch is None:
+                raise ParseError("Found narrative text outside of a branch. Add a branch header starting with '#'.")
             paragraph_buffer.append(line)
 
         # 파일 끝 처리
-        if current_chapter is not None and paragraph_buffer:
+        if current_branch is not None and paragraph_buffer:
             merged = self._merge_paragraph_buffer(paragraph_buffer)
-            current_chapter.paragraphs.extend(merged)
+            current_branch.paragraphs.extend(merged)
             paragraph_buffer.clear()
 
-        # 시작 챕터가 명시되지 않았다면 첫 챕터를 시작으로
+        # 시작 분기가 명시되지 않았다면 첫 분기를 시작으로
         if story.start_id is None:
-            if story.chapters:
-                story.start_id = next(iter(story.chapters.keys()))
+            if story.branches:
+                story.start_id = next(iter(story.branches.keys()))
             else:
-                raise ParseError("No chapters found in story.")
+                raise ParseError("No branches found in story.")
 
         # 타겟 유효성 경고를 위한 기본 검사(존재하지 않는 타겟은 실행 중에도 확인)
         return story
@@ -252,16 +273,23 @@ class StoryParser:
             paragraphs.append("\n".join(current).strip())
         return paragraphs
 
-    def _parse_chapter_header(self, header_line: str) -> Chapter:
-        """
-        형식: "# id: Title" 또는 "# id"
-        """
-        content = header_line.lstrip("#").strip()
+    def _parse_chapter_decl(self, line: str) -> Chapter:
+        """형식: '@chapter id: Title' 또는 '@chapter id'"""
+        content = line[len("@chapter"):].strip()
         if ":" in content:
             cid, title = content.split(":", 1)
             return Chapter(chapter_id=cid.strip(), title=title.strip())
+        return Chapter(chapter_id=content.strip(), title=content.strip())
+
+    def _parse_branch_header(self, header_line: str, chapter_id: str) -> Branch:
+        """형식: '# id: Title' 또는 '# id'"""
+        content = header_line.lstrip("#").strip()
+        if ":" in content:
+            bid, title = content.split(":", 1)
+            return Branch(branch_id=bid.strip(), title=title.strip(), chapter_id=chapter_id)
         else:
-            return Chapter(chapter_id=content.strip(), title=content.strip())
+            bid = content.strip()
+            return Branch(branch_id=bid, title=bid, chapter_id=chapter_id)
 
     def _parse_choice_line(self, line: str) -> Choice:
         """
@@ -335,10 +363,10 @@ class StoryParser:
 @dataclass
 class Step:
     """
-    히스토리의 한 단계. chapter_id와 사용자가 그 챕터에서 선택한 선택지 텍스트를 기록.
-    선택지가 없는 챕터일 수도 있으므로 chosen_text는 Optional.
+    히스토리의 한 단계. 분기(branch_id)와 그 때 사용자가 선택한 텍스트를 기록.
+    선택지가 없는 분기일 수도 있으므로 chosen_text는 Optional.
     """
-    chapter_id: str
+    branch_id: str
     chosen_text: Optional[str] = None
 
 
@@ -361,8 +389,10 @@ class BranchingNovelApp(tk.Tk):
 
         # 히스토리와 현재 인덱스
         self.history: List[Step] = []
-        self.current_index: int = -1  # history에서 현재 페이지 위치
+        self.current_index: int = -1  # history에서 현재 분기 위치
         self.visited_chapters: List[str] = []
+        self.chapter_positions: List[int] = []  # 각 챕터의 시작 인덱스
+        self.chapter_page_index: int = -1
 
         self._build_ui()
         self._bind_events()
@@ -408,6 +438,7 @@ class BranchingNovelApp(tk.Tk):
 
         self.btn_home = ttk.Button(btn_frame, text="처음부터", command=self._reset_to_start)
         self.btn_home.grid(row=0, column=0, padx=4)
+        ttk.Label(btn_frame, text="← →").grid(row=0, column=1, padx=4)
 
         # 본문 표시
         text_frame = ttk.Frame(right_frame)
@@ -433,7 +464,8 @@ class BranchingNovelApp(tk.Tk):
         self._update_nav_buttons()
 
     def _bind_events(self):
-        pass
+        self.bind("<Left>", self._go_prev_chapter)
+        self.bind("<Right>", self._go_next_chapter)
 
     def _populate_chapter_list(self):
         self.chapter_list.delete(0, tk.END)
@@ -442,25 +474,45 @@ class BranchingNovelApp(tk.Tk):
             title = ch.title if ch and ch.title else cid
             self.chapter_list.insert(tk.END, f"{cid}  |  {title}")
 
+    def _go_prev_chapter(self, event=None):
+        if self.chapter_page_index > 0:
+            self.chapter_page_index -= 1
+            self._render_page(self.chapter_page_index)
+
+    def _go_next_chapter(self, event=None):
+        if self.chapter_page_index < len(self.chapter_positions) - 1:
+            self.chapter_page_index += 1
+            self._render_page(self.chapter_page_index)
+
     def _reset_to_start(self):
         self.history.clear()
         self.current_index = -1
         self.visited_chapters.clear()
+        self.chapter_positions.clear()
+        self.chapter_page_index = -1
         self._populate_chapter_list()
         start_id = self.story.start_id
-        if not start_id or start_id not in self.story.chapters:
-            messagebox.showerror("오류", "시작 챕터가 유효하지 않습니다.")
+        if not start_id or start_id not in self.story.branches:
+            messagebox.showerror("오류", "시작 분기가 유효하지 않습니다.")
             return
-        self._append_step(Step(chapter_id=start_id, chosen_text=None), truncate_future=False)
+        self._append_step(Step(branch_id=start_id, chosen_text=None), truncate_future=False)
         self._render_current()
 
     def _append_step(self, step: Step, truncate_future: bool = True):
         # 과거로 돌아간 상태에서 새 선택을 하면 미래 히스토리를 잘라낸다.
         if truncate_future and self.current_index < len(self.history) - 1:
             self.history = self.history[:self.current_index + 1]
+        prev_branch = self.story.get_branch(self.history[self.current_index].branch_id) if self.history and self.current_index >= 0 else None
+        new_branch = self.story.get_branch(step.branch_id)
         self.history.append(step)
         self.current_index = len(self.history) - 1
-        self._record_visit(step.chapter_id)
+        if not self.chapter_positions:
+            self.chapter_positions.append(0)
+        elif prev_branch and new_branch and prev_branch.chapter_id != new_branch.chapter_id:
+            self.chapter_positions.append(self.current_index)
+        self.chapter_page_index = len(self.chapter_positions) - 1
+        if new_branch:
+            self._record_visit(new_branch.chapter_id)
         self._update_nav_buttons()
 
     def _replace_current_step(self, step: Step):
@@ -469,34 +521,64 @@ class BranchingNovelApp(tk.Tk):
         else:
             self.history = [step]
             self.current_index = 0
-        self._record_visit(step.chapter_id)
+        br = self.story.get_branch(step.branch_id)
+        if br:
+            self._record_visit(br.chapter_id)
         self._update_nav_buttons()
 
-    def _record_visit(self, cid: str):
+    def _record_visit(self, branch_id: str):
+        br = self.story.get_branch(branch_id)
+        if not br:
+            return
+        cid = br.chapter_id
         if cid not in self.visited_chapters:
             self.visited_chapters.append(cid)
             self._populate_chapter_list()
         self._select_chapter_in_list(cid)
 
-    def _render_current(self):
-        ch = self._current_chapter()
-        if not ch:
+    def _render_page(self, page_index: int):
+        if not self.chapter_positions:
             return
-        # 현재 상태 계산
-        self.state = self._compute_state(self.current_index)
-        # 본문 렌더
-        self._set_text_content(self._format_chapter_text(ch))
-        # 선택지 렌더
-        self._render_choices(ch)
-        # 경로 표시
+        start = self.chapter_positions[page_index]
+        end = self.chapter_positions[page_index + 1] if page_index + 1 < len(self.chapter_positions) else len(self.history)
+        lines: List[str] = []
+        if start > 0:
+            prev_step = self.history[start - 1]
+            if prev_step.chosen_text:
+                lines.append(f"> {prev_step.chosen_text}")
+        for i in range(start, end):
+            step = self.history[i]
+            br = self.story.get_branch(step.branch_id)
+            if not br:
+                continue
+            if br.paragraphs:
+                lines.append("\n".join(br.paragraphs))
+            if i + 1 < end and step.chosen_text:
+                lines.append(f"> {step.chosen_text}")
+        text = "\n".join(lines) if lines else "(내용 없음)"
+        self._set_text_content(text)
+        if page_index == len(self.chapter_positions) - 1:
+            last_branch = self.story.get_branch(self.history[end - 1].branch_id)
+            if last_branch:
+                self._render_choices(last_branch)
+        else:
+            for w in self.choice_frame.winfo_children():
+                w.destroy()
         self._update_path_label()
-        # 리스트에서 현재 챕터 하이라이트
-        self._select_chapter_in_list(ch.chapter_id)
+        cur_branch = self.story.get_branch(self.history[start].branch_id)
+        if cur_branch:
+            self._select_chapter_in_list(cur_branch.chapter_id)
 
-    def _current_chapter(self) -> Optional[Chapter]:
+    def _render_current(self):
+        if not self.history:
+            return
+        self.state = self._compute_state(self.current_index)
+        self._render_page(self.chapter_page_index)
+
+    def _current_branch(self) -> Optional[Branch]:
         if 0 <= self.current_index < len(self.history):
             step = self.history[self.current_index]
-            return self.story.get_chapter(step.chapter_id)
+            return self.story.get_branch(step.branch_id)
         return None
 
     def _set_text_content(self, text: str):
@@ -506,18 +588,13 @@ class BranchingNovelApp(tk.Tk):
         self.text_widget.configure(state="disabled")
         self.text_widget.see("1.0")
 
-    def _format_chapter_text(self, ch: Chapter) -> str:
-        header = f"[{ch.chapter_id}] {ch.title}\n\n" if ch.title else f"[{ch.chapter_id}]\n\n"
-        body = "\n\n".join(ch.paragraphs) if ch.paragraphs else "(내용 없음)"
-        return header + body
-
-    def _render_choices(self, ch: Chapter):
+    def _render_choices(self, br: Branch):
         # 기존 버튼 제거
         for w in self.choice_frame.winfo_children():
             w.destroy()
 
         display: List[Tuple[Choice, bool]] = []  # (choice, disabled)
-        for choice in ch.choices:
+        for choice in br.choices:
             ok = True
             if choice.condition:
                 ok = self._evaluate_condition(choice.condition)
@@ -542,10 +619,10 @@ class BranchingNovelApp(tk.Tk):
             btn.grid(row=idx-1, column=0, sticky="ew", pady=2)
 
     def _choose(self, choice: Choice):
-        # 타겟 챕터 유효성 검사
-        target = self.story.get_chapter(choice.target_id)
+        # 타겟 분기 유효성 검사
+        target = self.story.get_branch(choice.target_id)
         if not target:
-            messagebox.showerror("오류", f"타겟 챕터가 존재하지 않습니다: {choice.target_id}")
+            messagebox.showerror("오류", f"타겟 분기가 존재하지 않습니다: {choice.target_id}")
             return
 
         # 현재 스텝에 선택 텍스트 기록
@@ -555,7 +632,7 @@ class BranchingNovelApp(tk.Tk):
             self.history[self.current_index] = cur
 
         # 미래 히스토리 절단 후 다음 스텝 추가
-        next_step = Step(chapter_id=choice.target_id, chosen_text=None)
+        next_step = Step(branch_id=choice.target_id, chosen_text=None)
         if self.current_index < len(self.history) - 1:
             self.history = self.history[:self.current_index + 1]
         self._append_step(next_step, truncate_future=False)
@@ -568,8 +645,8 @@ class BranchingNovelApp(tk.Tk):
         # 경로를 간단히 요약하여 표시: id(선택) -> id(선택) ...
         parts: List[str] = []
         for i, step in enumerate(self.history):
-            ch = self.story.get_chapter(step.chapter_id)
-            name = ch.title if ch and ch.title else step.chapter_id
+            br = self.story.get_branch(step.branch_id)
+            name = br.title if br and br.title else step.branch_id
             if step.chosen_text:
                 parts.append(f"{name}({step.chosen_text})")
             else:
@@ -591,10 +668,10 @@ class BranchingNovelApp(tk.Tk):
         state: Dict[str, Union[int, float, bool]] = dict(self.story.variables)
         for i in range(0, upto_index + 1):
             step = self.history[i]
-            ch = self.story.get_chapter(step.chapter_id)
-            if not ch:
+            br = self.story.get_branch(step.branch_id)
+            if not br:
                 continue
-            for act in ch.actions:
+            for act in br.actions:
                 cur = state.get(act.var, 0)
                 if isinstance(cur, bool):
                     cur = int(cur)
