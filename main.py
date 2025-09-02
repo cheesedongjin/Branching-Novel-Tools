@@ -362,6 +362,7 @@ class BranchingNovelApp(tk.Tk):
         # 히스토리와 현재 인덱스
         self.history: List[Step] = []
         self.current_index: int = -1  # history에서 현재 페이지 위치
+        self.visited_chapters: List[str] = []
 
         self._build_ui()
         self._bind_events()
@@ -386,9 +387,6 @@ class BranchingNovelApp(tk.Tk):
         self.chapter_list.grid(row=1, column=0, sticky="nsw")
         self._populate_chapter_list()
 
-        self.goto_button = ttk.Button(left_frame, text="이 챕터로 이동", command=self._jump_to_selected_chapter)
-        self.goto_button.grid(row=2, column=0, sticky="ew", pady=(6, 0))
-
         # 우측: 상단 네비게이션 바
         right_frame = ttk.Frame(self, padding=(8, 8, 8, 8))
         right_frame.grid(row=0, column=1, sticky="nsew")
@@ -409,12 +407,7 @@ class BranchingNovelApp(tk.Tk):
         btn_frame.grid(row=0, column=1, rowspan=2, sticky="e")
 
         self.btn_home = ttk.Button(btn_frame, text="처음부터", command=self._reset_to_start)
-        self.btn_prev = ttk.Button(btn_frame, text="◀ 이전", command=self._go_prev)
-        self.btn_next = ttk.Button(btn_frame, text="다음 ▶", command=self._go_next)
-
         self.btn_home.grid(row=0, column=0, padx=4)
-        self.btn_prev.grid(row=0, column=1, padx=4)
-        self.btn_next.grid(row=0, column=2, padx=4)
 
         # 본문 표시
         text_frame = ttk.Frame(right_frame)
@@ -440,20 +433,20 @@ class BranchingNovelApp(tk.Tk):
         self._update_nav_buttons()
 
     def _bind_events(self):
-        self.chapter_list.bind("<Double-Button-1>", lambda e: self._jump_to_selected_chapter())
+        pass
 
     def _populate_chapter_list(self):
         self.chapter_list.delete(0, tk.END)
-        items: List[Tuple[str, str]] = []
-        for cid, ch in self.story.chapters.items():
-            items.append((cid, ch.title or cid))
-        # 고정된 순서를 위해 chapter_id로 정렬
-        for cid, title in sorted(items, key=lambda x: x[0]):
+        for cid in self.visited_chapters:
+            ch = self.story.get_chapter(cid)
+            title = ch.title if ch and ch.title else cid
             self.chapter_list.insert(tk.END, f"{cid}  |  {title}")
 
     def _reset_to_start(self):
         self.history.clear()
         self.current_index = -1
+        self.visited_chapters.clear()
+        self._populate_chapter_list()
         start_id = self.story.start_id
         if not start_id or start_id not in self.story.chapters:
             messagebox.showerror("오류", "시작 챕터가 유효하지 않습니다.")
@@ -467,6 +460,7 @@ class BranchingNovelApp(tk.Tk):
             self.history = self.history[:self.current_index + 1]
         self.history.append(step)
         self.current_index = len(self.history) - 1
+        self._record_visit(step.chapter_id)
         self._update_nav_buttons()
 
     def _replace_current_step(self, step: Step):
@@ -475,38 +469,14 @@ class BranchingNovelApp(tk.Tk):
         else:
             self.history = [step]
             self.current_index = 0
+        self._record_visit(step.chapter_id)
         self._update_nav_buttons()
 
-    def _go_prev(self):
-        if self.current_index > 0:
-            self.current_index -= 1
-            self._render_current()
-        self._update_nav_buttons()
-
-    def _go_next(self):
-        # 다음은 히스토리 상의 다음 단계로 이동
-        if self.current_index < len(self.history) - 1:
-            self.current_index += 1
-            self._render_current()
-        self._update_nav_buttons()
-
-    def _jump_to_selected_chapter(self):
-        sel = self.chapter_list.curselection()
-        if not sel:
-            return
-        idx = sel[0]
-        item = self.chapter_list.get(idx)
-        # "id  |  title" 형식
-        cid = item.split("|", 1)[0].strip()
-        if cid not in self.story.chapters:
-            messagebox.showerror("오류", "선택한 챕터를 찾을 수 없습니다.")
-            return
-        # 현재 위치 이후 히스토리 절단 후 점프
-        new_step = Step(chapter_id=cid, chosen_text=None)
-        if self.current_index < len(self.history) - 1:
-            self.history = self.history[:self.current_index + 1]
-        self._append_step(new_step, truncate_future=False)
-        self._render_current()
+    def _record_visit(self, cid: str):
+        if cid not in self.visited_chapters:
+            self.visited_chapters.append(cid)
+            self._populate_chapter_list()
+        self._select_chapter_in_list(cid)
 
     def _render_current(self):
         ch = self._current_chapter()
@@ -592,8 +562,7 @@ class BranchingNovelApp(tk.Tk):
         self._render_current()
 
     def _update_nav_buttons(self):
-        self.btn_prev.configure(state=("normal" if self.current_index > 0 else "disabled"))
-        self.btn_next.configure(state=("normal" if self.current_index < len(self.history) - 1 else "disabled"))
+        pass
 
     def _update_path_label(self):
         # 경로를 간단히 요약하여 표시: id(선택) -> id(선택) ...
