@@ -93,7 +93,7 @@ function MakeTempScriptFile(const Hint: String): String;
 var
   Base: String;
 begin
-  Base := ExpandConstant('{tmp}\installer_' + Hint + '_' + IntToStr(GetTickCount) + '.ps1');
+  Base := ExpandConstant('{tmp}\installer_' + Hint + '_' + IntToStr(Random(1000000)) + '.ps1');
   Result := Base;
 end;
 
