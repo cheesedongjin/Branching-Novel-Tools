@@ -93,14 +93,11 @@ begin
 end;
 
 function MakeTempScriptFile(const Hint: String): String;
-var
-  Stamp: String;
 begin
-  { 시간 스탬프 + 난수로 충돌 회피 }
-  Stamp := GetDateTimeString('yyyymmddhhnnss', '', '');
   repeat
+    // 충돌 가능성 거의 0인 대형 난수로 파일명 생성
     Result := ExpandConstant(
-      '{tmp}\installer_' + Hint + '_' + Stamp + '_' + IntToStr(Random(1000000)) + '.ps1'
+      '{tmp}\installer_' + Hint + '_' + IntToStr(Random(2147483647)) + '.ps1'
     );
   until not FileExists(Result);
 end;
