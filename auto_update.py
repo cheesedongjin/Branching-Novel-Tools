@@ -22,6 +22,8 @@ import tempfile
 import urllib.request
 from tkinter import messagebox
 
+from i18n import tr
+
 
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "owner/TextGameScript")
 
@@ -77,8 +79,8 @@ def check_for_update(app_name: str, installer_name: str, *, parent=None) -> None
         if _ver_tuple(latest) <= _ver_tuple(current_version):
             return
 
-        msg = f"{app_name} {latest} 버전이 있습니다. 지금 업데이트할까요?"
-        if not messagebox.askyesno("업데이트", msg, parent=parent):
+        msg = tr("update_available", app=app_name, ver=latest)
+        if not messagebox.askyesno(tr("update_title"), msg, parent=parent):
             return
 
         asset_url = None
@@ -93,9 +95,9 @@ def check_for_update(app_name: str, installer_name: str, *, parent=None) -> None
         tmp.close()
         urllib.request.urlretrieve(asset_url, tmp.name)
         subprocess.Popen([tmp.name, "/VERYSILENT", "/NORESTART"])
-        messagebox.showinfo("업데이트", "설치 프로그램이 실행되었습니다.", parent=parent)
+        messagebox.showinfo(tr("update_title"), tr("update_started"), parent=parent)
     except Exception:
-        # 업데이트 실패는 조용히 무시
+        # Update failures are silently ignored
         pass
 
 

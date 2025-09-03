@@ -1,29 +1,30 @@
 """
 Branching Novel Editor (GUI)
 
-이 에디터는 하나의 "챕터" 안에 여러 "분기"(branch)를 배치하는 최신 문법을
-완전히 지원합니다. 분기들은 기존 챕터와 동일한 역할을 하며, 챕터는 책의 한 장처럼
-여러 분기를 묶는 큰 단위입니다.
+This editor supports the syntax where multiple branches are placed within a
+single chapter. Branches behave like in the game, while chapters group them
+like chapters in a book.
 
-문법 포맷:
-  @title: 작품 제목
-  @start: 시작분기ID
+Syntax format::
+
+  @title: Story Title
+  @start: StartBranchID
 
   @chapter chapter_id: Chapter Title
   # branch_id: Branch Title
-  본문 문단1
+  Paragraph line 1
 
-  본문 문단2
+  Paragraph line 2
 
-  * 버튼 문구 -> target_branch_id
-  * 버튼 문구2 -> target_branch_id2
+  * Button text -> target_branch_id
+  * Button text 2 -> target_branch_id2
 
-주의:
-  - 챕터 id와 분기 id는 각각 전역에서 고유해야 함.
-  - 선택지 타깃은 존재하지 않는 분기를 가리킬 수도 있으나, 저장 전 유효성 경고 제공.
-  - 본문은 에디터에서 빈 줄로 문단 구분.
+Notes:
+  - Chapter IDs and branch IDs must be unique.
+  - Choice targets may point to non-existing branches but validation will warn.
+  - Paragraphs are separated by blank lines.
 
-사용법:
+Usage:
   python branching_novel_editor.py
 """
 
@@ -33,6 +34,8 @@ import re
 import ast
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+
+from i18n import tr
 from dataclasses import dataclass, field
 from typing import Any, List, Dict, Optional, Tuple, Union
 
@@ -533,7 +536,7 @@ class BranchingNovelApp(tk.Tk):
         btn_frame = ttk.Frame(nav_frame)
         btn_frame.grid(row=0, column=1, rowspan=2, sticky="e")
 
-        self.btn_home = ttk.Button(btn_frame, text="처음부터", command=self._confirm_reset)
+        self.btn_home = ttk.Button(btn_frame, text=tr("start_over"), command=self._confirm_reset)
         self.btn_home.grid(row=0, column=0, padx=4)
         self.btn_prev = ttk.Button(btn_frame, text="←", command=self._go_prev_chapter)
         self.btn_prev.grid(row=0, column=1, padx=4)
@@ -589,7 +592,7 @@ class BranchingNovelApp(tk.Tk):
 
     def _confirm_reset(self):
         if messagebox.askyesno(
-            "경고", "지금까지의 진행 상황이 사라집니다.\n처음부터 다시 시작하시겠습니까?"
+            tr("warning"), tr("reset_warning")
         ):
             self._reset_to_start()
 
@@ -602,7 +605,7 @@ class BranchingNovelApp(tk.Tk):
         self._populate_chapter_list()
         start_id = self.story.start_id
         if not start_id or start_id not in self.story.branches:
-            messagebox.showerror("오류", "시작 분기가 유효하지 않습니다.")
+            messagebox.showerror(tr("error"), tr("invalid_start"))
             return
         self._append_step(Step(branch_id=start_id, chosen_text=None), truncate_future=False)
         self._render_current()
@@ -663,7 +666,7 @@ class BranchingNovelApp(tk.Tk):
                 lines.append("\n".join(br.paragraphs))
             if i + 1 < end and step.chosen_text:
                 lines.append(f"> {step.chosen_text}")
-        text = "\n".join(lines) if lines else "(내용 없음)"
+        text = "\n".join(lines) if lines else tr("no_content")
         self._set_text_content(text)
         if page_index == len(self.chapter_positions) - 1:
             last_branch = self.story.get_branch(self.history[end - 1].branch_id)
@@ -715,7 +718,7 @@ class BranchingNovelApp(tk.Tk):
         if not display or all(disabled for _, disabled in display):
             lbl = ttk.Label(self.choice_frame, text=self.story.ending_text)
             lbl.grid(row=0, column=0, sticky="w")
-            exit_btn = ttk.Button(self.choice_frame, text="나가기", command=self.destroy)
+            exit_btn = ttk.Button(self.choice_frame, text=tr("exit"), command=self.destroy)
             exit_btn.grid(row=1, column=0, sticky="ew", pady=2)
             return
 
@@ -731,7 +734,7 @@ class BranchingNovelApp(tk.Tk):
         # 타겟 분기 유효성 검사
         target = self.story.get_branch(choice.target_id)
         if not target:
-            messagebox.showerror("오류", f"타겟 분기가 존재하지 않습니다: {choice.target_id}")
+            messagebox.showerror(tr("error"), tr("missing_target", id=choice.target_id))
             return
 
         # 현재 스텝에 선택 텍스트 기록
