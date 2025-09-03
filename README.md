@@ -15,8 +15,10 @@ Files typically use the `.bnov` extension and are encoded in UTF-8.
 - `# <branch_id>: <title>` – begin a branch inside the current chapter; the title is optional.
   Chapter and branch identifiers must be unique across the file.
 
-## Narrative paragraphs
+## Narrative paragraphs and interpolation
 Inside a branch, plain text lines form the body. Blank lines separate paragraphs.
+Any `${var}` tokens in titles, paragraph text, or choice labels are replaced with
+the current value of that variable.
 
 ## State actions
 Lines beginning with `!` inside a branch modify variables.
@@ -34,10 +36,10 @@ Values may be numbers or booleans (`true`/`false`).
 ### Condition syntax
 Conditions are boolean expressions evaluated with the current variables. They
 support:
-- Variables, numeric literals, and `true`/`false`.
+- Variables, numeric literals, and `true`/`false` (case-insensitive).
 - Arithmetic: `+ - * / // % **`.
 - Comparisons: `== != < <= > >=`.
-- Logical operators: `!` (not), `&` (and), `|` (or).
+- Logical operators: `!` (not), `&`/`&&` (and), `|`/`||` (or).
 
 No separate comment syntax is supported; empty lines only serve as paragraph
 separators.
