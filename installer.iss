@@ -61,48 +61,59 @@ begin
   Result := Exec('powershell.exe', '-NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.Major"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
-function RunPS(const Cmd: String): Boolean;
-var ResultCode: Integer; PSArgs: String;
+function RunPSLog(const Cmd, LogPath: String): Boolean;
+var ResultCode: Integer; PSArgs, FullCmd: String;
 begin
-  PSArgs := '-NoLogo -NoProfile -ExecutionPolicy Bypass -Command ' + AddQuotes(Cmd);
-  Result := Exec('powershell.exe', PSArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  if not Result then
-    MsgBox('PowerShell 실행 실패. 코드: ' + IntToStr(ResultCode), mbError, MB_OK);
+  PSArgs := '-NoLogo -NoProfile -ExecutionPolicy Bypass -Command ';
+  FullCmd :=
+    '$ErrorActionPreference="Stop"; ' +
+    'Add-Content ' + AddQuotes(LogPath) + ' "CMD: ' + StringChange(Cmd, '"', '\"') + '" ; ' +
+    Cmd + ' ; ' +
+    'Add-Content ' + AddQuotes(LogPath) + ' "OK"';
+  Result := Exec('powershell.exe', PSArgs + AddQuotes(FullCmd), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if not Result then AddToLog(LogPath, 'PS ERROR code=' + IntToStr(ResultCode));
+end;
+
+procedure AddToLog(const LogPath, Line: String);
+begin
+  SaveStringToFile(LogPath, Line + #13#10, True);
 end;
 
 function DownloadAndVerify(const UrlZip, UrlSha, DestZip, DestSha: String): Boolean;
-var Cmd: String;
+var Cmd, LogPath: String;
 begin
+  LogPath := ExpandConstant('{app}\install.log');
   Cmd :=
     '$ErrorActionPreference="Stop";' +
     '[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;' +
     'Invoke-WebRequest -UseBasicParsing ' + AddQuotes(UrlZip) + ' -OutFile ' + AddQuotes(DestZip) + ';' +
     'Invoke-WebRequest -UseBasicParsing ' + AddQuotes(UrlSha) + ' -OutFile ' + AddQuotes(DestSha) + ';';
-  if not RunPS(Cmd) then begin Result := False; exit; end;
+  if not RunPSLog(Cmd, LogPath) then begin Result := False; exit; end;
 
   Cmd :=
     '$ErrorActionPreference="Stop";' +
     '$expected=(Get-Content ' + AddQuotes(DestSha) + ' | Select-Object -First 1).Split(" ",[System.StringSplitOptions]::RemoveEmptyEntries)[0];' +
     '$actual=(Get-FileHash ' + AddQuotes(DestZip) + ' -Algorithm SHA256).Hash.ToLower();' +
     'if($expected.ToLower() -ne $actual){Write-Error "해시 불일치. expected=$expected actual=$actual"}';
-  if not RunPS(Cmd) then begin Result := False; exit; end;
+  if not RunPSLog(Cmd, LogPath) then begin Result := False; exit; end;
   Result := True;
 end;
 
 function ExpandZipToApp(const ZipPath, TargetDir: String): Boolean;
-var Cmd: String;
+var Cmd, LogPath: String;
 begin
+  LogPath := ExpandConstant('{app}\install.log');
   Cmd :=
     '$ErrorActionPreference="Stop";' +
     'if(-not(Test-Path ' + AddQuotes(TargetDir) + ')){New-Item -ItemType Directory -Path ' + AddQuotes(TargetDir) + ' | Out-Null};' +
     'try{Expand-Archive -LiteralPath ' + AddQuotes(ZipPath) + ' -DestinationPath ' + AddQuotes(TargetDir) + ' -Force} ' +
     'catch{Add-Type -AssemblyName System.IO.Compression.FileSystem;[System.IO.Compression.ZipFile]::ExtractToDirectory(' +
       AddQuotes(ZipPath) + ',' + AddQuotes(TargetDir) + ')}';
-  Result := RunPS(Cmd);
+  Result := RunPSLog(Cmd, LogPath);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var ZipPath, ShaPath: String; Ok: Boolean;
+var ZipPath, ShaPath, LogPath: String; Ok: Boolean;
 begin
   if CurStep = ssInstall then
   begin
@@ -112,6 +123,8 @@ begin
       WizardForm.Close; exit;
     end;
 
+    LogPath := ExpandConstant('{app}\install.log');
+    AddToLog(LogPath, 'BEGIN INSTALL');
     ZipPath := ExpandConstant('{tmp}\payload.zip');
     ShaPath := ExpandConstant('{tmp}\payload.sha256');
 
@@ -119,10 +132,9 @@ begin
     WizardForm.ProgressGauge.Style := npbstMarquee;
 
     Ok := DownloadAndVerify('{#PayloadZipURL}', '{#PayloadShaURL}', ZipPath, ShaPath);
-    if not Ok then
-    begin
+    if not Ok then begin
       WizardForm.ProgressGauge.Style := npbstNormal;
-      MsgBox('다운로드 또는 무결성 검증 실패. 네트워크 상태나 URL을 확인해 주세요.', mbError, MB_OK);
+      MsgBox('다운로드/무결성 검증 실패. install.log를 확인하세요.', mbError, MB_OK);
       WizardForm.Close; exit;
     end;
 
@@ -130,10 +142,10 @@ begin
     Ok := ExpandZipToApp(ZipPath, ExpandConstant('{app}'));
     WizardForm.ProgressGauge.Style := npbstNormal;
 
-    if not Ok then
-    begin
-      MsgBox('압축 해제에 실패했습니다.', mbError, MB_OK);
+    if not Ok then begin
+      MsgBox('압축 해제 실패. install.log를 확인하세요.', mbError, MB_OK);
       WizardForm.Close; exit;
     end;
+    AddToLog(LogPath, 'END OK');
   end;
 end;
