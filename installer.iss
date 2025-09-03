@@ -192,8 +192,9 @@ begin
     3) 대상 폴더 생성
     4) robocopy 정식 경로 호출 + 인자 배열
     5) 실패 시 robocopy 로그 꼬리를 install.log에 기록
-    6) robocopy 실패하면 Copy-Item으로 폴백
-    7) 최종 EXE 존재 검증 }
+    6) robocopy 실패하면 Copy-Item -Path 로 폴백 복사(와일드카드 확장)
+    7) 루트에 EXE 없으면 재배치(하위에서 찾아 루트로 이동)
+    8) 최종 EXE 존재 검증 }
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
     '$zip = ' + PSQuote(ZipPath) + '; ' +
@@ -213,17 +214,22 @@ begin
     '$p = Start-Process -FilePath $robocopyPath -ArgumentList $args -NoNewWindow -PassThru -Wait; ' +
     '$code = $p.ExitCode; ' +
     'if ($code -ge 8) { ' +
-    '  try { ' +
-    '    $tail = Get-Content -LiteralPath $robolog -Tail 80 -ErrorAction SilentlyContinue -Encoding UTF8; ' +
-    '    foreach ($line in $tail) { Write-Log("ROBOCOPY: " + $line) } ' +
-    '  } catch {} ' +
+    '  try { $tail = Get-Content -LiteralPath $robolog -Tail 80 -ErrorAction SilentlyContinue -Encoding UTF8; foreach ($line in $tail) { Write-Log("ROBOCOPY: " + $line) } } catch {} ' +
     '  Write-Log("ROBOCOPY EXIT CODE: " + $code); ' +
     '  Write-Log("ROBOCOPY LOG: " + $robolog); ' +
-    '  Write-Log("FALLBACK: Copy-Item -Recurse -Force"); ' +
-    '  Copy-Item -LiteralPath (Join-Path $temp ''*'') -Destination $target -Recurse -Force -ErrorAction Stop; ' +
+    '  Write-Log("FALLBACK: Copy-Item -Recurse -Force (with wildcard expansion)"); ' +
+    '  Copy-Item -Path (Join-Path $temp ''*'') -Destination $target -Recurse -Force -ErrorAction Stop; ' +
     '} ' +
 
+    { 루트에 EXE가 없으면 하위에서 찾아 루트로 이동 }
     '$expectedExe = Join-Path $target ' + PSQuote('{#MyAppExe}') + '; ' +
+    'if (-not (Test-Path -LiteralPath $expectedExe)) { ' +
+    '  $found = Get-ChildItem -Path $target -Filter ' + PSQuote('{#MyAppExe}') + ' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1; ' +
+    '  if ($null -ne $found) { ' +
+    '    Move-Item -LiteralPath $found.FullName -Destination $expectedExe -Force; ' +
+    '  } ' +
+    '} ' +
+
     'if (-not (Test-Path -LiteralPath $expectedExe)) { ' +
     '  throw ("Expected exe not found: " + $expectedExe + ". Check ZIP root & folder structure.") ' +
     '}';
