@@ -82,6 +82,13 @@ from typing import List, Dict, Optional, Tuple, Union, Any
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
+from auto_update import check_for_update
+
+
+APP_NAME = "Branching Novel GUI"
+APP_VERSION = "0.1.0"
+INSTALLER_NAME = "BranchingNovelGUI-Online-Setup.exe"
+
 
 @dataclass
 class Choice:
@@ -967,6 +974,7 @@ def main():
         sys.exit(1)
 
     app = BranchingNovelApp(story, file_path, show_disabled=story.show_disabled)
+    check_for_update(APP_NAME, APP_VERSION, INSTALLER_NAME, parent=app)
     app.mainloop()
 
 
