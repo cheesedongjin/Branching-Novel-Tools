@@ -36,6 +36,12 @@ from tkinter import ttk, filedialog, messagebox
 from dataclasses import dataclass, field
 from typing import Any, List, Dict, Optional, Tuple, Union
 
+from auto_update import check_for_update
+
+
+APP_NAME = "Branching Novel Editor"
+INSTALLER_NAME = "BranchingNovelEditor-Online-Setup.exe"
+
 
 VAR_PATTERN = re.compile(r"\$\{[^}]+\}")
 
@@ -3036,6 +3042,7 @@ class ChapterEditor(tk.Tk):
 
 def main():
     app = ChapterEditor()
+    check_for_update(APP_NAME, INSTALLER_NAME, parent=app)
     app.mainloop()
 
 if __name__ == "__main__":
