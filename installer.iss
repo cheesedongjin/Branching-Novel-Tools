@@ -55,6 +55,13 @@ Root: HKCR; Subkey: "BranchingNovelFile"; ValueType: string; ValueName: ""; Valu
 Root: HKCR; Subkey: "BranchingNovelFile\DefaultIcon"; ValueType: string; ValueData: "{app}\{#MyAppExe},0"
 Root: HKCR; Subkey: "BranchingNovelFile\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExe}"" ""%1"""
 
+[UninstallDelete]
+; 앱 폴더 내용(파일/하위폴더 전부) 삭제
+Type: filesandordirs; Name: "{app}\*"
+
+; 설치 로그까지 함께 정리
+Type: files; Name: "{app}\install.log"
+
 [Code]
 function IsPSAvailable(): Boolean;
 var
