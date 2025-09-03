@@ -56,7 +56,8 @@ Root: HKCR; Subkey: "BranchingNovelFile\shell\open\command"; ValueType: string; 
 
 [Code]
 function IsPSAvailable(): Boolean;
-var ResultCode: Integer;
+var
+  ResultCode: Integer;
 begin
   Result := Exec('powershell.exe', '-NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.Major"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
@@ -69,13 +70,21 @@ end;
 function RunPSLog(const Cmd, LogPath: String): Boolean;
 var
   ResultCode: Integer;
-  PSArgs, FullCmd: String;
+  PSArgs, FullCmd, EscapedCmd: String;
 begin
   PSArgs := '-NoLogo -NoProfile -ExecutionPolicy Bypass -Command ';
-  FullCmd := '$ErrorActionPreference=''Stop''; ' +
-             'Add-Content -Path ' + AddQuotes(LogPath) + ' -Value ''CMD: ' + StringChange(Cmd, '''', '''''') + '''; ' +
-             Cmd + '; ' +
-             'Add-Content -Path ' + AddQuotes(LogPath) + ' -Value ''OK''';
+
+  { StringChange / StringChangeEx 는 문자열을 반환하지 않습니다.
+    복사본을 만든 뒤 그 복사본의 따옴표를 이스케이프 처리합니다. }
+  EscapedCmd := Cmd;
+  StringChangeEx(EscapedCmd, '''', '''''', True);  { ' → '' }
+
+  FullCmd :=
+    '$ErrorActionPreference=''Stop''; ' +
+    'Add-Content -Path ' + AddQuotes(LogPath) + ' -Value ''CMD: ' + EscapedCmd + '''; ' +
+    Cmd + '; ' +
+    'Add-Content -Path ' + AddQuotes(LogPath) + ' -Value ''OK''';
+
   Result := Exec('powershell.exe', PSArgs + AddQuotes(FullCmd), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   if not Result then
     AddToLog(LogPath, 'PS ERROR code=' + IntToStr(ResultCode));
@@ -87,25 +96,31 @@ var
   Cmd, LogPath: String;
 begin
   LogPath := ExpandConstant('{app}\install.log');
-  Cmd := '$ErrorActionPreference=''Stop''; ' +
-         '[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; ' +
-         'Invoke-WebRequest -UseBasicParsing -Uri ' + AddQuotes(UrlZip) + ' -OutFile ' + AddQuotes(DestZip) + '; ' +
-         'Invoke-WebRequest -UseBasicParsing -Uri ' + AddQuotes(UrlSha) + ' -OutFile ' + AddQuotes(DestSha) + ';';
+
+  Cmd :=
+    '$ErrorActionPreference=''Stop''; ' +
+    '[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; ' +
+    'Invoke-WebRequest -UseBasicParsing -Uri ' + AddQuotes(UrlZip) + ' -OutFile ' + AddQuotes(DestZip) + '; ' +
+    'Invoke-WebRequest -UseBasicParsing -Uri ' + AddQuotes(UrlSha) + ' -OutFile ' + AddQuotes(DestSha) + ';';
+
   if not RunPSLog(Cmd, LogPath) then
   begin
     Result := False;
     exit;
   end;
 
-  Cmd := '$ErrorActionPreference=''Stop''; ' +
-         '$expected = (Get-Content -Path ' + AddQuotes(DestSha) + ' | Select-Object -First 1).Split('' '')[0]; ' +
-         '$actual = (Get-FileHash -Path ' + AddQuotes(DestZip) + ' -Algorithm SHA256).Hash.ToLower(); ' +
-         'if ($expected.ToLower() -ne $actual) { throw ''Hash mismatch. Expected: '' + $expected + '', Actual: '' + $actual }';
+  Cmd :=
+    '$ErrorActionPreference=''Stop''; ' +
+    '$expected = (Get-Content -Path ' + AddQuotes(DestSha) + ' | Select-Object -First 1).Split('' '')[0]; ' +
+    '$actual = (Get-FileHash -Path ' + AddQuotes(DestZip) + ' -Algorithm SHA256).Hash.ToLower(); ' +
+    'if ($expected.ToLower() -ne $actual) { throw ''Hash mismatch. Expected: '' + $expected + '', Actual: '' + $actual }';
+
   if not RunPSLog(Cmd, LogPath) then
   begin
     Result := False;
     exit;
   end;
+
   Result := True;
 end;
 
@@ -114,10 +129,14 @@ var
   Cmd, LogPath: String;
 begin
   LogPath := ExpandConstant('{app}\install.log');
-  Cmd := '$ErrorActionPreference=''Stop''; ' +
-         'if (-not (Test-Path -Path ' + AddQuotes(TargetDir) + ')) { New-Item -ItemType Directory -Path ' + AddQuotes(TargetDir) + ' | Out-Null }; ' +
-         'try { Expand-Archive -LiteralPath ' + AddQuotes(ZipPath) + ' -DestinationPath ' + AddQuotes(TargetDir) + ' -Force } ' +
-         'catch { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory(' + AddQuotes(ZipPath) + ', ' + AddQuotes(TargetDir) + ') }';
+
+  Cmd :=
+    '$ErrorActionPreference=''Stop''; ' +
+    'if (-not (Test-Path -Path ' + AddQuotes(TargetDir) + ')) { New-Item -ItemType Directory -Path ' + AddQuotes(TargetDir) + ' | Out-Null }; ' +
+    'try { Expand-Archive -LiteralPath ' + AddQuotes(ZipPath) + ' -DestinationPath ' + AddQuotes(TargetDir) + ' -Force } ' +
+    'catch { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory(' +
+      AddQuotes(ZipPath) + ', ' + AddQuotes(TargetDir) + ') }';
+
   Result := RunPSLog(Cmd, LogPath);
 end;
 
@@ -138,6 +157,7 @@ begin
 
     LogPath := ExpandConstant('{app}\install.log');
     AddToLog(LogPath, 'BEGIN INSTALL');
+
     ZipPath := ExpandConstant('{tmp}\payload.zip');
     ShaPath := ExpandConstant('{tmp}\payload.sha256');
 
@@ -163,6 +183,7 @@ begin
       WizardForm.Close;
       exit;
     end;
+
     AddToLog(LogPath, 'END OK');
   end;
 end;
