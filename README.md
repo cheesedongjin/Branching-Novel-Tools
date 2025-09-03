@@ -61,3 +61,11 @@ You wake up in a dark room.
 ```
 python branching_novel.py path/to/story.bnov
 ```
+
+## Language settings
+
+The editor and viewer have independent language settings.  Edit
+`editor_language.txt` or `game_language.txt` to set the default language for
+each tool.  You can also override the language at runtime by passing
+`--lang <code>` (for example, `en` or `ko`) when launching
+`branching_novel_editor.py` or `branching_novel.py`.

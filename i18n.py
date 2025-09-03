@@ -1,17 +1,27 @@
 import os
 
-LANG_FILE = os.path.join(os.path.dirname(__file__), 'language.txt')
+_DEFAULT_LANG = 'en'
+_DEFAULT_LANG_FILE = os.path.join(os.path.dirname(__file__), 'language.txt')
 
 
-def _load_language() -> str:
+def _load_lang_from_file(path: str) -> str:
     try:
-        with open(LANG_FILE, encoding='utf-8') as f:
-            return f.read().strip() or 'en'
+        with open(path, encoding='utf-8') as f:
+            return f.read().strip() or _DEFAULT_LANG
     except OSError:
-        return 'en'
+        return _DEFAULT_LANG
 
 
-LANG = _load_language()
+LANG = _load_lang_from_file(_DEFAULT_LANG_FILE)
+
+
+def set_language(lang: str) -> None:
+    global LANG
+    LANG = lang
+
+
+def set_language_from_file(path: str = _DEFAULT_LANG_FILE) -> None:
+    set_language(_load_lang_from_file(path))
 
 _STRINGS = {
     'en': {
