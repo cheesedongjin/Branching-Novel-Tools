@@ -34,7 +34,8 @@ SetupLogging=yes
 #ifexist "assets\icons\app.ico"
 SetupIconFile=assets\icons\app.ico
 #endif
-DefaultLanguage=english
+LanguageDetectionMethod=uilanguage
+UsePreviousLanguage=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -84,7 +85,10 @@ begin
   if CurStep = ssPostInstall then
   begin
     LangFile := ExpandConstant('{app}\language.txt');
-    SaveStringToFile(LangFile, ActiveLanguage, False);
+    if ActiveLanguage = 'korean' then
+      SaveStringToFile(LangFile, 'korean', False);
+    else
+      SaveStringToFile(LangFile, 'en', False);
   end;
 end;
 
