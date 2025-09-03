@@ -187,9 +187,14 @@ function ExpandZipToApp(const ZipPath, TargetDir, LogPath: String): Boolean;
 var
   Cmd: String;
 begin
-  { 1) 임시 폴더에 먼저 해제 (.NET ZipFile 사용)
-    2) 대상 폴더 생성
-    3) robocopy /E /R:1 /W:1 /COPY:DAT 로 복사, 종료코드 8 이상이면 실패 }
+  { 전략:
+      1) 임시 폴더에 먼저 해제 (.NET ZipFile 사용)
+      2) 소스 파일 개수 검증(0이면 즉시 실패)
+      3) 대상 폴더 생성
+      4) robocopy를 cmd.exe /c로 호출하면서 모든 경로를 따옴표로 감싼 단일 문자열로 전달
+      5) robocopy 종료코드 8 이상은 실패 처리
+      6) 핵심 실행 파일 존재 검증(없으면 실패로 처리해 즉시 원인 파악)
+  }
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
     '$zip = ' + PSQuote(ZipPath) + '; ' +
@@ -198,13 +203,20 @@ begin
     'New-Item -ItemType Directory -Path $temp | Out-Null; ' +
     'Add-Type -AssemblyName System.IO.Compression.FileSystem; ' +
     '[System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $temp); ' +
+    '$srcCount = (Get-ChildItem -LiteralPath $temp -Recurse -Force | Where-Object { -not $_.PSIsContainer }).Count; ' +
+    'if ($srcCount -eq 0) { throw (''ZIP is empty after extract: '' + $zip) } ' +
     'if (-not (Test-Path -LiteralPath $target)) { New-Item -ItemType Directory -Path $target | Out-Null }; ' +
     '$robolog = Join-Path $env:TEMP (''robocopy_'' + [guid]::NewGuid().ToString() + ''.log''); ' +
-    'Start-Process -FilePath cmd.exe -ArgumentList @("/c","robocopy", ' +
-      '$temp, $target, "/E","/R:1","/W:1","/NFL","/NDL","/NP","/NJH","/NJS","/COPY:DAT", ' +
-      '">`"$robolog`"","2>&1") -NoNewWindow -Wait; ' +
+    '$rcmd = ''robocopy "''
+      + $temp + ''" "'' + $target + ''" /E /R:1 /W:1 /NFL /NDL /NP /NJH /NJS /COPY:DAT >"''
+      + $robolog + ''" 2>&1''; ' +
+    'cmd.exe /c $rcmd; ' +
     '$code = $LASTEXITCODE; ' +
-    'if ($code -ge 8) { throw ("robocopy failed with exit code " + $code + ". Log: " + $robolog) }';
+    'if ($code -ge 8) { throw (''robocopy failed with exit code '' + $code + ''. Log: '' + $robolog) } ' +
+    '$expectedExe = Join-Path $target ' + PSQuote('{#MyAppExe}') + '; ' +
+    'if (-not (Test-Path -LiteralPath $expectedExe)) { ' +
+    '  throw (''Expected exe not found: '' + $expectedExe + ''. Check ZIP root & folder structure.'') ' +
+    '}';
 
   Result := WriteAndRunPS(Cmd, LogPath, 'expand_zip');
 end;
