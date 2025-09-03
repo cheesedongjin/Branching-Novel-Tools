@@ -61,7 +61,11 @@ class VarAutocomplete:
         widget.bind("<FocusOut>", lambda e: self.close())
 
     def _on_key(self, event):
-        if event.char == "$" or event.keysym == "dollar":
+        if (
+            event.char == "$"
+            or event.keysym == "dollar"
+            or (event.keysym == "4" and event.state & 0x1)
+        ):
             self.open()
 
     def trigger(self):
