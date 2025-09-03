@@ -59,9 +59,11 @@ function IsPSAvailable(): Boolean;
 var
   ResultCode: Integer;
 begin
-  Result := Exec('powershell.exe',
-                 '-NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.Major | Out-Null"',
-                 '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+  Result :=
+    Exec('powershell.exe',
+         '-NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.Major | Out-Null"',
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
+    and (ResultCode = 0);
 end;
 
 function SafeAddToLog(const LogPath, Line: String): Boolean;
@@ -83,9 +85,16 @@ var
   R: String;
 begin
   R := S;
-  { ' -> '' }
-  StringChangeEx(R, '''', '''''', True);
+  StringChangeEx(R, '''', '''''', True);  { ' -> '' }
   Result := R;
+end;
+
+function MakeTempScriptFile(const Hint: String): String;
+var
+  Base: String;
+begin
+  Base := ExpandConstant('{tmp}\installer_' + Hint + '_' + IntToStr(GetTickCount) + '.ps1');
+  Result := Base;
 end;
 
 function WriteAndRunPS(const Cmd, LogPath, ScriptNameHint: String): Boolean;
@@ -104,14 +113,10 @@ begin
   if not FileExists(PSExe) then
     PSExe := 'powershell.exe';
 
-  ScriptPath := GetTempFileName;  { e.g., C:\Users\...\AppData\Local\Temp\is-XXXX.tmp }
-  if FileExists(ScriptPath) then
-    DeleteFile(ScriptPath);
-  ScriptPath := ScriptPath + '-' + ScriptNameHint + '.ps1';
+  ScriptPath := MakeTempScriptFile(ScriptNameHint);
 
   EscapedCmd := EscapeForSingleQuotes(Cmd);
 
-  { PowerShell 스크립트: 단계 로그 + 예외 메시지/위치 기록 + 종료코드 }
   ScriptBody :=
     '$ErrorActionPreference = ''Stop'';' + #13#10 +
     '$Log = ' + AddQuotes(LogPath) + ';' + #13#10 +
@@ -156,7 +161,6 @@ function DownloadAndVerify(const UrlZip, UrlSha, DestZip, DestSha, LogPath: Stri
 var
   Cmd: String;
 begin
-  { 두 파일 모두 다운로드 후 SHA256 검증 }
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
     '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ' +
@@ -213,7 +217,6 @@ begin
     try
       WizardForm.ProgressGauge.Style := npbstMarquee;
     except
-      { 구버전 테마 호환 }
       WizardForm.ProgressGauge.Style := npbstNormal;
     end;
 
