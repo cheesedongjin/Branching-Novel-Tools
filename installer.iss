@@ -31,6 +31,7 @@ ArchitecturesAllowed=x64
 PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#MyAppExe}
 SetupLogging=yes
+SetupIconFile=assets\icons\app.ico
 
 [Languages]
 Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"

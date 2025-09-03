@@ -63,8 +63,8 @@ jobs:
           from PIL import Image
           src = Image.open("assets/icons/appicon.png").convert("RGBA")
           sizes = [(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)]
-          imgs = [src.resize(s, Image.LANCZOS) for s in sizes]
-          imgs[0].save("assets/icons/app.ico", format="ICO", sizes=sizes)
+          # 핵심: 원본 이미지를 그대로 저장하면서 sizes만 넘긴다.
+          src.save("assets/icons/app.ico", format="ICO", sizes=sizes)
           '@
             Set-Content gen_ico.py $code -Encoding UTF8
             python gen_ico.py
