@@ -90,7 +90,7 @@ begin
   Result := R;
 end;
 
-{ PowerShell 문자열 항상 단일따옴표로 감싸기 (내부 ' 이스케이프) }
+{ PowerShell에서 사용할 문자열 인용: 항상 단일따옴표로 감싸고 내부 ' 이스케이프 }
 function PSQuote(const S: String): String;
 begin
   Result := '''' + EscapeForSingleQuotes(S) + '''';
@@ -188,11 +188,12 @@ var
   Cmd: String;
 begin
   { 1) 임시 폴더에 해제(.NET ZipFile)
-    2) 소스 파일 개수 검증(0이면 실패)
+    2) 소스 파일 개수 검증
     3) 대상 폴더 생성
-    4) robocopy를 Start-Process 인자 배열로 호출(+ /LOG)
-    5) robocopy 종료코드 8 이상이면 실패
-    6) 핵심 실행 파일 존재 검증 }
+    4) robocopy 정식 경로 호출 + 인자 배열
+    5) 실패 시 robocopy 로그 꼬리를 install.log에 기록
+    6) robocopy 실패하면 Copy-Item으로 폴백
+    7) 최종 EXE 존재 검증 }
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
     '$zip = ' + PSQuote(ZipPath) + '; ' +
@@ -204,11 +205,24 @@ begin
     '$srcCount = (Get-ChildItem -LiteralPath $temp -Recurse -Force | Where-Object { -not $_.PSIsContainer }).Count; ' +
     'if ($srcCount -eq 0) { throw (''ZIP is empty after extract: '' + $zip) } ' +
     'if (-not (Test-Path -LiteralPath $target)) { New-Item -ItemType Directory -Path $target | Out-Null }; ' +
+
+    '$robocopyPath = Join-Path $env:WINDIR "System32\\robocopy.exe"; ' +
+    'if (-not (Test-Path -LiteralPath $robocopyPath)) { $robocopyPath = "robocopy.exe" } ' +
     '$robolog = Join-Path $env:TEMP (''robocopy_'' + [guid]::NewGuid().ToString() + ''.log''); ' +
     '$args = @($temp, $target, "/E","/R:1","/W:1","/NFL","/NDL","/NP","/NJH","/NJS","/COPY:DAT", "/LOG:" + $robolog); ' +
-    '$p = Start-Process -FilePath "robocopy.exe" -ArgumentList $args -NoNewWindow -PassThru -Wait; ' +
+    '$p = Start-Process -FilePath $robocopyPath -ArgumentList $args -NoNewWindow -PassThru -Wait; ' +
     '$code = $p.ExitCode; ' +
-    'if ($code -ge 8) { throw ("robocopy failed with exit code " + $code + ". Log: " + $robolog) } ' +
+    'if ($code -ge 8) { ' +
+    '  try { ' +
+    '    $tail = Get-Content -LiteralPath $robolog -Tail 80 -ErrorAction SilentlyContinue -Encoding UTF8; ' +
+    '    foreach ($line in $tail) { Write-Log("ROBOCOPY: " + $line) } ' +
+    '  } catch {} ' +
+    '  Write-Log("ROBOCOPY EXIT CODE: " + $code); ' +
+    '  Write-Log("ROBOCOPY LOG: " + $robolog); ' +
+    '  Write-Log("FALLBACK: Copy-Item -Recurse -Force"); ' +
+    '  Copy-Item -LiteralPath (Join-Path $temp ''*'') -Destination $target -Recurse -Force -ErrorAction Stop; ' +
+    '} ' +
+
     '$expectedExe = Join-Path $target ' + PSQuote('{#MyAppExe}') + '; ' +
     'if (-not (Test-Path -LiteralPath $expectedExe)) { ' +
     '  throw ("Expected exe not found: " + $expectedExe + ". Check ZIP root & folder structure.") ' +
