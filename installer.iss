@@ -17,7 +17,7 @@
 #endif
 
 [Setup]
-AppId={{B1C50C47-7B73-4308-9C74-2A9B3E11A9D3}
+AppId={{B1C50C47-7B73-4308-9C74-2A9B3E11A9D3}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\{#MyAppName}
@@ -31,7 +31,9 @@ ArchitecturesAllowed=x64
 PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#MyAppExe}
 SetupLogging=yes
+#ifexist "assets\icons\app.ico"
 SetupIconFile=assets\icons\app.ico
+#endif
 
 [Languages]
 Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"

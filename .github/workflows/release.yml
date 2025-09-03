@@ -147,6 +147,21 @@ jobs:
           name: windows-artifacts
           path: release
 
+      - name: Optional icon (.ico) from PNG
+        shell: pwsh
+        run: |
+          if (Test-Path assets/icons/appicon.png) {
+            @'
+          from PIL import Image
+          src = Image.open("assets/icons/appicon.png").convert("RGBA")
+          sizes = [(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)]
+          src.save("assets/icons/app.ico", format="ICO", sizes=sizes)
+          '@ | Set-Content -Encoding UTF8 gen_ico.py
+            python gen_ico.py
+          } else {
+            echo "no PNG icon, skip"
+          }
+
       - name: Install Inno Setup
         shell: pwsh
         run: |
