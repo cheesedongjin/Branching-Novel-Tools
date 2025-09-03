@@ -187,14 +187,12 @@ function ExpandZipToApp(const ZipPath, TargetDir, LogPath: String): Boolean;
 var
   Cmd: String;
 begin
-  { 전략:
-      1) 임시 폴더에 먼저 해제 (.NET ZipFile 사용)
-      2) 소스 파일 개수 검증(0이면 즉시 실패)
-      3) 대상 폴더 생성
-      4) robocopy를 cmd.exe /c로 호출하면서 모든 경로를 따옴표로 감싼 단일 문자열로 전달
-      5) robocopy 종료코드 8 이상은 실패 처리
-      6) 핵심 실행 파일 존재 검증(없으면 실패로 처리해 즉시 원인 파악)
-  }
+  { 1) 임시 폴더에 해제(.NET ZipFile)
+    2) 소스 파일 개수 검증(0이면 실패)
+    3) 대상 폴더 생성
+    4) robocopy를 Start-Process 인자 배열로 호출(+ /LOG)
+    5) robocopy 종료코드 8 이상이면 실패
+    6) 핵심 실행 파일 존재 검증 }
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
     '$zip = ' + PSQuote(ZipPath) + '; ' +
@@ -207,15 +205,13 @@ begin
     'if ($srcCount -eq 0) { throw (''ZIP is empty after extract: '' + $zip) } ' +
     'if (-not (Test-Path -LiteralPath $target)) { New-Item -ItemType Directory -Path $target | Out-Null }; ' +
     '$robolog = Join-Path $env:TEMP (''robocopy_'' + [guid]::NewGuid().ToString() + ''.log''); ' +
-    '$rcmd = ''robocopy "''
-      + $temp + ''" "'' + $target + ''" /E /R:1 /W:1 /NFL /NDL /NP /NJH /NJS /COPY:DAT >"''
-      + $robolog + ''" 2>&1''; ' +
-    'cmd.exe /c $rcmd; ' +
-    '$code = $LASTEXITCODE; ' +
-    'if ($code -ge 8) { throw (''robocopy failed with exit code '' + $code + ''. Log: '' + $robolog) } ' +
+    '$args = @($temp, $target, "/E","/R:1","/W:1","/NFL","/NDL","/NP","/NJH","/NJS","/COPY:DAT", "/LOG:" + $robolog); ' +
+    '$p = Start-Process -FilePath "robocopy.exe" -ArgumentList $args -NoNewWindow -PassThru -Wait; ' +
+    '$code = $p.ExitCode; ' +
+    'if ($code -ge 8) { throw ("robocopy failed with exit code " + $code + ". Log: " + $robolog) } ' +
     '$expectedExe = Join-Path $target ' + PSQuote('{#MyAppExe}') + '; ' +
     'if (-not (Test-Path -LiteralPath $expectedExe)) { ' +
-    '  throw (''Expected exe not found: '' + $expectedExe + ''. Check ZIP root & folder structure.'') ' +
+    '  throw ("Expected exe not found: " + $expectedExe + ". Check ZIP root & folder structure.") ' +
     '}';
 
   Result := WriteAndRunPS(Cmd, LogPath, 'expand_zip');
