@@ -72,13 +72,14 @@ var
   PSArgs, FullCmd: String;
 begin
   PSArgs := '-NoLogo -NoProfile -ExecutionPolicy Bypass -Command ';
-  FullCmd := '$ErrorActionPreference="Stop"; ' +
-             'Add-Content -Path ' + AddQuotes(LogPath) + ' -Value "CMD: ' + StringChange(Cmd, '"', '""') + '"; ' +
+  FullCmd := '$ErrorActionPreference=''Stop''; ' +
+             'Add-Content -Path ' + AddQuotes(LogPath) + ' -Value ''CMD: ' + StringChange(Cmd, '''', '''''') + '''; ' +
              Cmd + '; ' +
-             'Add-Content -Path ' + AddQuotes(LogPath) + ' -Value "OK"';
+             'Add-Content -Path ' + AddQuotes(LogPath) + ' -Value ''OK''';
   Result := Exec('powershell.exe', PSArgs + AddQuotes(FullCmd), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   if not Result then
     AddToLog(LogPath, 'PS ERROR code=' + IntToStr(ResultCode));
+  Result := Result and (ResultCode = 0);
 end;
 
 function DownloadAndVerify(const UrlZip, UrlSha, DestZip, DestSha: String): Boolean;
@@ -86,7 +87,7 @@ var
   Cmd, LogPath: String;
 begin
   LogPath := ExpandConstant('{app}\install.log');
-  Cmd := '$ErrorActionPreference="Stop"; ' +
+  Cmd := '$ErrorActionPreference=''Stop''; ' +
          '[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; ' +
          'Invoke-WebRequest -UseBasicParsing -Uri ' + AddQuotes(UrlZip) + ' -OutFile ' + AddQuotes(DestZip) + '; ' +
          'Invoke-WebRequest -UseBasicParsing -Uri ' + AddQuotes(UrlSha) + ' -OutFile ' + AddQuotes(DestSha) + ';';
@@ -96,10 +97,10 @@ begin
     exit;
   end;
 
-  Cmd := '$ErrorActionPreference="Stop"; ' +
-         '$expected = (Get-Content -Path ' + AddQuotes(DestSha) + ' | Select-Object -First 1).Split(" ",[System.StringSplitOptions]::RemoveEmptyEntries)[0]; ' +
+  Cmd := '$ErrorActionPreference=''Stop''; ' +
+         '$expected = (Get-Content -Path ' + AddQuotes(DestSha) + ' | Select-Object -First 1).Split('' '')[0]; ' +
          '$actual = (Get-FileHash -Path ' + AddQuotes(DestZip) + ' -Algorithm SHA256).Hash.ToLower(); ' +
-         'if ($expected.ToLower() -ne $actual) { throw "Hash mismatch. Expected: $expected, Actual: $actual" }';
+         'if ($expected.ToLower() -ne $actual) { throw ''Hash mismatch. Expected: '' + $expected + '', Actual: '' + $actual }';
   if not RunPSLog(Cmd, LogPath) then
   begin
     Result := False;
@@ -113,7 +114,7 @@ var
   Cmd, LogPath: String;
 begin
   LogPath := ExpandConstant('{app}\install.log');
-  Cmd := '$ErrorActionPreference="Stop"; ' +
+  Cmd := '$ErrorActionPreference=''Stop''; ' +
          'if (-not (Test-Path -Path ' + AddQuotes(TargetDir) + ')) { New-Item -ItemType Directory -Path ' + AddQuotes(TargetDir) + ' | Out-Null }; ' +
          'try { Expand-Archive -LiteralPath ' + AddQuotes(ZipPath) + ' -DestinationPath ' + AddQuotes(TargetDir) + ' -Force } ' +
          'catch { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory(' + AddQuotes(ZipPath) + ', ' + AddQuotes(TargetDir) + ') }';
