@@ -86,7 +86,6 @@ from auto_update import check_for_update
 
 
 APP_NAME = "Branching Novel GUI"
-APP_VERSION = "0.1.0"
 INSTALLER_NAME = "BranchingNovelGUI-Online-Setup.exe"
 
 
@@ -974,7 +973,7 @@ def main():
         sys.exit(1)
 
     app = BranchingNovelApp(story, file_path, show_disabled=story.show_disabled)
-    check_for_update(APP_NAME, APP_VERSION, INSTALLER_NAME, parent=app)
+    check_for_update(APP_NAME, INSTALLER_NAME, parent=app)
     app.mainloop()
 
 

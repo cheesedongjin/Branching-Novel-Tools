@@ -40,7 +40,6 @@ from auto_update import check_for_update
 
 
 APP_NAME = "Branching Novel Editor"
-APP_VERSION = "0.1.0"
 INSTALLER_NAME = "BranchingNovelEditor-Online-Setup.exe"
 
 
@@ -3043,7 +3042,7 @@ class ChapterEditor(tk.Tk):
 
 def main():
     app = ChapterEditor()
-    check_for_update(APP_NAME, APP_VERSION, INSTALLER_NAME, parent=app)
+    check_for_update(APP_NAME, INSTALLER_NAME, parent=app)
     app.mainloop()
 
 if __name__ == "__main__":
