@@ -70,10 +70,9 @@ procedure EnsureParentDirExists(const FilePath: String);
 var
   Dir: String;
 begin
-  { Inno에서는 ExtractFilePath 사용 }
   Dir := ExtractFilePath(FilePath);
   if (Dir <> '') and (not DirExists(Dir)) then
-    CreateDir(Dir);  { 필요한 최종 폴더만 생성 (Program Files는 이미 존재) }
+    CreateDir(Dir);
 end;
 
 function SafeAddToLog(const LogPath, Line: String): Boolean;
@@ -87,7 +86,6 @@ var
   R: String;
 begin
   R := S;
-  { ' -> '' (StringChangeEx 대신 StringChange 사용, 반환값 무시) }
   StringChange(R, '''', '''''');
   Result := R;
 end;
@@ -95,7 +93,6 @@ end;
 function MakeTempScriptFile(const Hint: String): String;
 begin
   repeat
-    // 충돌 가능성 거의 0인 대형 난수로 파일명 생성
     Result := ExpandConstant(
       '{tmp}\installer_' + Hint + '_' + IntToStr(Random(2147483647)) + '.ps1'
     );
@@ -121,7 +118,6 @@ begin
   ScriptPath := MakeTempScriptFile(ScriptNameHint);
   EscapedCmd := EscapeForSingleQuotes(Cmd);
 
-  { PowerShell 스크립트: 단계 로그 + 예외 메시지/위치 기록 + 종료코드 }
   ScriptBody :=
     '$ErrorActionPreference = ''Stop'';' + #13#10 +
     '$Log = ' + AddQuotes(LogPath) + ';' + #13#10 +
@@ -182,16 +178,36 @@ end;
 function ExpandZipToApp(const ZipPath, TargetDir, LogPath: String): Boolean;
 var
   Cmd: String;
+  TempExtractDir: String;
 begin
+  TempExtractDir := ExpandConstant('{tmp}\extracted');
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
-    'if (-not (Test-Path -LiteralPath ' + AddQuotes(TargetDir) + ')) { New-Item -ItemType Directory -Path ' + AddQuotes(TargetDir) + ' | Out-Null }; ' +
-    'try { ' +
-    '  Expand-Archive -LiteralPath ' + AddQuotes(ZipPath) + ' -DestinationPath ' + AddQuotes(TargetDir) + ' -Force ' +
-    '} catch { ' +
+    #13#10 +
+    '# Create temp extract directory' + #13#10 +
+    '$TempDir = ' + AddQuotes(TempExtractDir) + '; ' +
+    'if (Test-Path -LiteralPath $TempDir) { Remove-Item -LiteralPath $TempDir -Recurse -Force -ErrorAction SilentlyContinue }; ' +
+    'New-Item -ItemType Directory -Path $TempDir -Force | Out-Null; ' +
+    #13#10 +
+    '# Extract ZIP to temp directory' + #13#10 +
+    'try {' + #13#10 +
+    '  Expand-Archive -LiteralPath ' + AddQuotes(ZipPath) + ' -DestinationPath $TempDir -Force; ' +
+    '} catch {' + #13#10 +
     '  Add-Type -AssemblyName System.IO.Compression.FileSystem; ' +
-    '  [System.IO.Compression.ZipFile]::ExtractToDirectory(' + AddQuotes(ZipPath) + ', ' + AddQuotes(TargetDir) + '); ' +
-    '}';
+    '  [System.IO.Compression.ZipFile]::ExtractToDirectory(' + AddQuotes(ZipPath) + ', $TempDir); ' +
+    '}; ' +
+    #13#10 +
+    '# Create target directory if not exists' + #13#10 +
+    'if (-not (Test-Path -LiteralPath ' + AddQuotes(TargetDir) + ')) { New-Item -ItemType Directory -Path ' + AddQuotes(TargetDir) + ' -Force | Out-Null }; ' +
+    #13#10 +
+    '# Copy files to target using robocopy' + #13#10 +
+    '$RoboArgs = @(''' + TempExtractDir + ''', ''' + TargetDir + ''', ''/MIR'', ''/R:3'', ''/W:5''); ' +
+    '$Proc = Start-Process -FilePath ''robocopy'' -ArgumentList $RoboArgs -NoNewWindow -PassThru -Wait; ' +
+    '# robocopy exit codes 0-7 are success or minor issues (e.g., skipped files)' + #13#10 +
+    'if ($Proc.ExitCode -gt 7) { throw (''robocopy failed with exit code '' + $Proc.ExitCode) }; ' +
+    #13#10 +
+    '# Clean up temp directory' + #13#10 +
+    'Remove-Item -LiteralPath $TempDir -Recurse -Force -ErrorAction SilentlyContinue;';
 
   Result := WriteAndRunPS(Cmd, LogPath, 'expand_zip');
 end;
@@ -234,13 +250,13 @@ begin
       Exit;
     end;
 
-    WizardForm.StatusLabel.Caption := '압축 해제 중...';
+    WizardForm.StatusLabel.Caption := '압축 해제 및 파일 복사 중...';
     Ok := ExpandZipToApp(ZipPath, ExpandConstant('{app}'), LogPath);
     WizardForm.ProgressGauge.Style := npbstNormal;
 
     if not Ok then
     begin
-      MsgBox('압축 해제 실패. install.log를 확인하세요.', mbError, MB_OK);
+      MsgBox('압축 해제 또는 파일 복사 실패. install.log를 확인하세요.', mbError, MB_OK);
       WizardForm.Close;
       Exit;
     end;
