@@ -1,4 +1,4 @@
-; installer.iss - Online Bootstrap Installer (공용, 최종 완전본)
+; installer.iss - Online Bootstrap Installer
 
 #ifndef MyAppName
   #define MyAppName "MyApp"
@@ -86,8 +86,14 @@ var
   R: String;
 begin
   R := S;
-  StringChange(R, '''', '''''');
+  StringChange(R, '''', '''''');  { ' -> '' }
   Result := R;
+end;
+
+{ PowerShell 문자열 항상 단일따옴표로 감싸기 (내부 ' 이스케이프) }
+function PSQuote(const S: String): String;
+begin
+  Result := '''' + EscapeForSingleQuotes(S) + '''';
 end;
 
 function MakeTempScriptFile(const Hint: String): String;
@@ -120,7 +126,7 @@ begin
 
   ScriptBody :=
     '$ErrorActionPreference = ''Stop'';' + #13#10 +
-    '$Log = ' + AddQuotes(LogPath) + ';' + #13#10 +
+    '$Log = ' + PSQuote(LogPath) + ';' + #13#10 +
     '$TmpLog = Join-Path $env:TEMP ("installer_' + ScriptNameHint + '_log.txt");' + #13#10 +
     'function Write-Log($s){' + #13#10 +
     '  try { Add-Content -LiteralPath $Log -Value $s } catch { try { Add-Content -LiteralPath $TmpLog -Value $s } catch {} }' + #13#10 +
@@ -167,11 +173,11 @@ begin
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
     '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ' +
-    'Invoke-WebRequest -Uri ' + AddQuotes(UrlZip) + ' -OutFile ' + AddQuotes(DestZip) + '; ' +
-    'Invoke-WebRequest -Uri ' + AddQuotes(UrlSha) + ' -OutFile ' + AddQuotes(DestSha) + '; ' +
-    '$expected = (Get-Content -LiteralPath ' + AddQuotes(DestSha) + ' | Select-Object -First 1).Split('' '')[0]; ' +
+    'Invoke-WebRequest -Uri ' + PSQuote(UrlZip) + ' -OutFile ' + PSQuote(DestZip) + '; ' +
+    'Invoke-WebRequest -Uri ' + PSQuote(UrlSha) + ' -OutFile ' + PSQuote(DestSha) + '; ' +
+    '$expected = (Get-Content -LiteralPath ' + PSQuote(DestSha) + ' | Select-Object -First 1).Split('' '')[0]; ' +
     'if ([string]::IsNullOrWhiteSpace($expected)) { throw ''Empty SHA file'' } ' +
-    '$actual = (Get-FileHash -LiteralPath ' + AddQuotes(DestZip) + ' -Algorithm SHA256).Hash.ToLower(); ' +
+    '$actual = (Get-FileHash -LiteralPath ' + PSQuote(DestZip) + ' -Algorithm SHA256).Hash.ToLower(); ' +
     'if ($expected.ToLower() -ne $actual) { throw (''Hash mismatch. Expected: '' + $expected + '', Actual: '' + $actual) }';
 
   Result := WriteAndRunPS(Cmd, LogPath, 'download_verify');
@@ -186,8 +192,8 @@ begin
     3) robocopy /E /R:1 /W:1 /COPY:DAT 로 복사, 종료코드 8 이상이면 실패 }
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
-    '$zip = ' + AddQuotes(ZipPath) + '; ' +
-    '$target = ' + AddQuotes(TargetDir) + '; ' +
+    '$zip = ' + PSQuote(ZipPath) + '; ' +
+    '$target = ' + PSQuote(TargetDir) + '; ' +
     '$temp = Join-Path $env:TEMP (''payload_'' + [guid]::NewGuid().ToString()); ' +
     'New-Item -ItemType Directory -Path $temp | Out-Null; ' +
     'Add-Type -AssemblyName System.IO.Compression.FileSystem; ' +
