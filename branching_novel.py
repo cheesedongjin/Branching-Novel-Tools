@@ -1,75 +1,59 @@
 """
 Branching Novel GUI (Interactive Fiction with Simple Text Syntax)
 
-- 요구사항
-  1) 소설은 텍스트 파일로 분기별로 정의.
-  2) 간단한 문법을 파싱하여 게임 소설을 쓸 수 있음.
-  3) 파이썬 인자로 첫 텍스트 파일을 읽어 GUI를 실행.
-  4) 선택에 따라 "앞/뒤"로 넘길 수 있는 책처럼 감상 가능(방문 경로를 히스토리로 관리).
-  5) 챕터 목록 표시.
+Requirements
+------------
+1. Story content is defined in plain text files with branches.
+2. The simple syntax is parsed to play the novel.
+3. Run ``python branching_novel.py path/to/story.bnov`` to start.
+   (If omitted, a file selection dialog will appear.)
+4. Readers can move forward/backward like a book, keeping a history.
+5. A chapter list is displayed.
 
-- 사용법
-  python branching_novel.py path/to/story.bnov
-  (인자를 생략하면 파일 선택 대화상자가 열림)
+File Syntax
+-----------
+Metadata (optional):
+  ``@title``  - story title
+  ``@start``  - starting chapter ID
 
-- 파일 문법
-  메타데이터(선택):
-    @title: 작품 제목
-    @start: 시작 챕터ID
+Chapters:
+  ``# chapter_id: Chapter Title``
+  Paragraph lines separated by blank lines.
+  Choices use ``* button text -> next_chapter_id``.
 
-  챕터 선언:
-    # chapter_id: Chapter Title
-    본문 문단...
-    빈 줄은 문단 구분.
-    선택지는 다음 형식:
-      * 버튼에 보일 문장 -> 다음_챕터ID
-    문단과 선택지 사이의 순서는 자유. 선택지가 여러 개면 여러 줄로 나열.
+Example::
 
-  예시:
-    @title: 밤비
-    @start: intro
+  @title: Bambi
+  @start: intro
 
-    # intro: 창밖의 이름
-    밤비는 창문을 열고 한숨을 내쉬었다.
-    어둠 속에서 누군가 그녀의 이름을 불렀다.
+  # intro: Name at the Window
+  Bambi opened the window and sighed.
+  In the darkness someone called her name.
 
-    * 창밖을 확인한다 -> alley
-    * 대답하지 않는다 -> silence
-    * 문을 걸어 잠근다 -> lock
+  * Check outside -> alley
+  * Do not answer -> silence
+  * Lock the door -> lock
 
-    # alley: 골목의 남자
-    그녀는 조심스레 창문을 열어젖혔다.
-    서늘한 밤공기가 흘러들었다. 골목 아래, 낯선 남자가 서 있었다.
+  # alley: The Man in the Alley
+  She cautiously pushed the window open.
+  Cool night air flowed in. A stranger stood below.
 
-    * 그를 부른다 -> call
-    * 창문을 닫는다 -> lock
+  * Call out to him -> call
+  * Close the window -> lock
 
-- 설계 요약
-  1) Parser: StoryParser
-     - @title, @start 처리
-     - # id: Title 로 챕터 정의
-     - 본문은 연속 줄을 문단으로 모으고, 빈 줄로 문단 경계
-     - 선택지 라인은 "* text -> target" 형식으로 파싱
-  2) Data Model
-     - Story: title, start_id, chapters(dict[str, Chapter])
-     - Chapter: id, title, paragraphs(list[str]), choices(list[Choice])
-     - Choice: text, target_id
-  3) GUI
-     - 좌측: Chapter List (Listbox)
-     - 우측 상단: 제목/경로/네비게이션(처음, 이전, 다음)
-     - 우측 중앙: 본문(Text, 읽기 전용, 스크롤)
-     - 우측 하단: 선택지 버튼들
-     - 히스토리: 사용자의 경로를 Step 단위로 저장
-       Step = {chapter_id, chosen_text(optional)}
-       '다음'은 히스토리에서 앞 항목으로 이동, '이전'은 뒤로
-       과거로 돌아가 새 선택을 하면 해당 시점 이후 히스토리를 잘라내어 새로운 경로 생성
-  4) 챕터 목록 클릭
-     - 리스트에서 챕터를 더블클릭하면 그 챕터로 점프
-     - 점프 시 현재 위치 이후 히스토리를 절단하고 새 경로로 이어짐
+Design Overview
+---------------
+1. Parser ``StoryParser`` handles ``@title``/``@start`` and parses chapters
+   and choices.
+2. Data model consists of ``Story``, ``Chapter``, and ``Choice`` classes.
+3. GUI shows chapter list, navigation, text, and choice buttons.
+   Reader history is stored so backtracking is possible.
+4. Double-clicking a chapter jumps to it and truncates future history.
 
-- 주의
-  - ASCII 아트나 이모티콘은 사용하지 않음.
-  - 외부 라이브러리 없음. Tkinter 표준만 사용.
+Notes
+-----
+- No ASCII art or emoticons.
+- Only the Python standard library (Tkinter) is used.
 """
 
 import argparse
@@ -81,6 +65,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Union, Any
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+
+from i18n import tr
 
 from auto_update import check_for_update
 
@@ -105,7 +91,7 @@ class Action:
 
 @dataclass
 class Branch:
-    """기존 챕터에 해당하는 세부 분기"""
+    """A branch belonging to an existing chapter."""
 
     branch_id: str
     title: str
@@ -117,7 +103,7 @@ class Branch:
 
 @dataclass
 class Chapter:
-    """여러 분기(Branch)를 담는 상위 단위"""
+    """A chapter containing multiple branches."""
 
     chapter_id: str
     title: str
@@ -127,7 +113,7 @@ class Chapter:
 @dataclass
 class Story:
     title: str = "Untitled"
-    start_id: Optional[str] = None  # 시작 분기 ID
+    start_id: Optional[str] = None  # start branch ID
     ending_text: str = "The End"
     show_disabled: bool = False
     chapters: Dict[str, Chapter] = field(default_factory=dict)
@@ -146,11 +132,11 @@ class ParseError(Exception):
 
 
 class StoryParser:
-    """
-    간단한 문법 파서
-    - 주석은 지원하지 않음. 비어 있는 줄은 문단 구분.
-    - 한 챕터 내부에서는 본문 줄과 선택지 라인이 섞여 있어도 됨.
-    - 선택지 라인은 "* "로 시작하고 "->"를 포함해야 함.
+    """Simple grammar parser.
+
+    - Comments are not supported; blank lines separate paragraphs.
+    - Within a chapter, paragraph and choice lines may be interleaved.
+    - Choice lines start with ``* `` and must contain ``->``.
     """
 
     def parse(self, text: str) -> Story:
@@ -161,11 +147,11 @@ class StoryParser:
         current_branch: Optional[Branch] = None
         paragraph_buffer: List[str] = []
 
-        # 메타데이터 임시 저장
+        # temporarily store metadata
         for idx, raw in enumerate(lines):
             line = raw.strip()
 
-            # 메타데이터 처리
+            # process metadata
             if line.startswith("@title:"):
                 story.title = line[len("@title:"):].strip() or "Untitled"
                 continue
@@ -180,7 +166,7 @@ class StoryParser:
                 story.show_disabled = val in ("true", "1", "yes", "on")
                 continue
 
-        # 실제 파싱 루프
+        # actual parsing loop
         i = 0
         while i < len(lines):
             raw = lines[i]
@@ -189,7 +175,7 @@ class StoryParser:
             i += 1
 
             if stripped.startswith("@chapter"):
-                # 챕터 선언
+                # chapter declaration
                 current_branch = None
                 current_chapter = self._parse_chapter_decl(stripped)
                 if current_chapter.chapter_id in story.chapters:
@@ -197,7 +183,7 @@ class StoryParser:
                 story.chapters[current_chapter.chapter_id] = current_chapter
                 continue
 
-            # 기타 메타데이터는 1차 루프에서 처리했으므로 건너뛴다
+            # other metadata handled in first pass
             if (
                 stripped.startswith("@title:")
                 or stripped.startswith("@start:")
@@ -206,7 +192,7 @@ class StoryParser:
             ):
                 continue
 
-            # 분기 시작
+            # start of branch
             if stripped.startswith("#"):
                 if current_chapter is None:
                     raise ParseError("Branch defined outside of a chapter.")
@@ -222,7 +208,7 @@ class StoryParser:
                 current_chapter.branches[current_branch.branch_id] = current_branch
                 continue
 
-            # 빈 줄은 문단 경계로 처리
+            # blank line indicates paragraph boundary
             if stripped == "":
                 if current_branch is not None:
                     merged = self._merge_paragraph_buffer(paragraph_buffer)
@@ -230,7 +216,7 @@ class StoryParser:
                     paragraph_buffer.clear()
                 continue
 
-            # 상태 변경 지시문
+            # state modification directive
             if stripped.startswith("!"):
                 action = self._parse_action_line(stripped)
                 if current_branch is None:
@@ -241,7 +227,7 @@ class StoryParser:
                     current_branch.actions.append(action)
                 continue
 
-            # 선택지 라인
+            # choice line
             if stripped.startswith("* "):
                 if current_branch is None:
                     raise ParseError("Choice found outside of any branch.")
@@ -249,32 +235,32 @@ class StoryParser:
                 current_branch.choices.append(choice)
                 continue
 
-            # 일반 본문 라인
+            # normal body line
             if current_branch is None:
                 raise ParseError("Found narrative text outside of a branch. Add a branch header starting with '#'.")
             paragraph_buffer.append(line)
 
-        # 파일 끝 처리
+        # end-of-file handling
         if current_branch is not None and paragraph_buffer:
             merged = self._merge_paragraph_buffer(paragraph_buffer)
             current_branch.paragraphs.extend(merged)
             paragraph_buffer.clear()
 
-        # 시작 분기가 명시되지 않았다면 첫 분기를 시작으로
+        # if start branch not specified, use first branch
         if story.start_id is None:
             if story.branches:
                 story.start_id = next(iter(story.branches.keys()))
             else:
                 raise ParseError("No branches found in story.")
 
-        # 타겟 유효성 경고를 위한 기본 검사(존재하지 않는 타겟은 실행 중에도 확인)
+        # basic check for missing targets (non-existent targets also checked at runtime)
         return story
 
     def _merge_paragraph_buffer(self, buffer: List[str]) -> List[str]:
         """
-        연속된 본문 라인들을 빈 줄 기준으로 문단 리스트로 변환.
-        이미 상위에서 빈 줄이 들어오면 플러시하므로 여기서는 버퍼 전체를 문단 하나로도 볼 수 있음.
-        다만 자연스러운 단락 구분을 위해 빈 줄이 포함되어 들어온 경우도 처리.
+        Convert consecutive body lines into a list of paragraphs separated by blank lines.
+        If a blank line already flushed in the caller, treat buffer as a single paragraph.
+        Handle existing blank lines for natural paragraph separation.
         """
         if not buffer:
             return []
@@ -292,7 +278,7 @@ class StoryParser:
         return paragraphs
 
     def _parse_chapter_decl(self, line: str) -> Chapter:
-        """형식: '@chapter id: Title' 또는 '@chapter id'"""
+        """Format: ``@chapter id: Title`` or ``@chapter id``."""
         content = line[len("@chapter"):].strip()
         if ":" in content:
             cid, title = content.split(":", 1)
@@ -300,7 +286,7 @@ class StoryParser:
         return Chapter(chapter_id=content.strip(), title=content.strip())
 
     def _parse_branch_header(self, header_line: str, chapter_id: str) -> Branch:
-        """형식: '# id: Title' 또는 '# id'"""
+        """Format: ``# id: Title`` or ``# id``."""
         content = header_line.lstrip("#").strip()
         if ":" in content:
             bid, title = content.split(":", 1)
@@ -311,7 +297,7 @@ class StoryParser:
 
     def _parse_choice_line(self, line: str) -> Choice:
         """
-        형식: "* [조건] text -> target_id" 또는 "* text -> target_id"
+        Format: "* [condition] text -> target_id" or "* text -> target_id"
         """
         body = line[2:].strip()
         if "->" not in body:
@@ -381,8 +367,8 @@ class StoryParser:
 @dataclass
 class Step:
     """
-    히스토리의 한 단계. 분기(branch_id)와 그 때 사용자가 선택한 텍스트를 기록.
-    선택지가 없는 분기일 수도 있으므로 chosen_text는 Optional.
+    A step in the history. Records branch_id and the text chosen by the user.
+    The branch may have no choices, so chosen_text is optional.
     """
     branch_id: str
     chosen_text: Optional[str] = None
@@ -390,7 +376,7 @@ class Step:
 
 class BranchingNovelApp(tk.Tk):
     """
-    Tkinter 기반 GUI 애플리케이션
+    Tkinter-based GUI application
     """
 
     def __init__(self, story: Story, file_path: str, show_disabled: bool = False):
@@ -401,21 +387,21 @@ class BranchingNovelApp(tk.Tk):
         self.story = story
         self.file_path = file_path
 
-        # 상태 값과 옵션
+        # state values and options
         self.show_disabled = show_disabled
         self.state: Dict[str, Union[int, float, bool]] = {}
 
-        # 히스토리와 현재 인덱스
+        # history and current index
         self.history: List[Step] = []
-        self.current_index: int = -1  # history에서 현재 분기 위치
+        self.current_index: int = -1  # current branch index in history
         self.visited_chapters: List[str] = []
-        self.chapter_positions: List[int] = []  # 각 챕터의 시작 인덱스
+        self.chapter_positions: List[int] = []  # start index of each chapter
         self.chapter_page_index: int = -1
 
         self._build_ui()
         self._bind_events()
 
-        # 시작 챕터로 이동
+        # move to starting chapter
         self._reset_to_start()
 
     def _build_ui(self):
@@ -456,7 +442,7 @@ class BranchingNovelApp(tk.Tk):
         btn_frame = ttk.Frame(nav_frame)
         btn_frame.grid(row=0, column=1, rowspan=2, sticky="e")
 
-        self.btn_home = ttk.Button(btn_frame, text="처음부터", command=self._confirm_reset)
+        self.btn_home = ttk.Button(btn_frame, text=tr("start_over"), command=self._confirm_reset)
         self.btn_home.grid(row=0, column=0, padx=4)
         self.btn_prev = ttk.Button(btn_frame, text="←", command=self._go_prev_chapter)
         self.btn_prev.grid(row=0, column=1, padx=4)
@@ -513,7 +499,7 @@ class BranchingNovelApp(tk.Tk):
 
     def _confirm_reset(self):
         if messagebox.askyesno(
-            "경고", "지금까지의 진행 상황이 사라집니다.\n처음부터 다시 시작하시겠습니까?"
+            tr("warning"), tr("reset_warning")
         ):
             self._reset_to_start()
 
@@ -526,7 +512,7 @@ class BranchingNovelApp(tk.Tk):
         self._populate_chapter_list()
         start_id = self.story.start_id
         if not start_id or start_id not in self.story.branches:
-            messagebox.showerror("오류", "시작 분기가 유효하지 않습니다.")
+            messagebox.showerror(tr("error"), tr("invalid_start"))
             return
         self._append_step(Step(branch_id=start_id, chosen_text=None), truncate_future=False)
         self._render_current()
@@ -587,7 +573,7 @@ class BranchingNovelApp(tk.Tk):
                 lines.append("\n".join(self._interpolate(p) for p in br.paragraphs))
             if i + 1 < end and step.chosen_text:
                 lines.append(f"> {step.chosen_text}")
-        text = "\n".join(lines) if lines else "(내용 없음)"
+        text = "\n".join(lines) if lines else tr("no_content")
         self._set_text_content(text)
         if page_index == len(self.chapter_positions) - 1:
             last_branch = self.story.get_branch(self.history[end - 1].branch_id)
@@ -642,7 +628,7 @@ class BranchingNovelApp(tk.Tk):
         if not display or all(disabled for _, disabled in display):
             lbl = ttk.Label(self.choice_frame, text=self._interpolate(self.story.ending_text))
             lbl.grid(row=0, column=0, sticky="w")
-            exit_btn = ttk.Button(self.choice_frame, text="나가기", command=self.destroy)
+            exit_btn = ttk.Button(self.choice_frame, text=tr("exit"), command=self.destroy)
             exit_btn.grid(row=1, column=0, sticky="ew", pady=2)
             return
 
@@ -659,7 +645,7 @@ class BranchingNovelApp(tk.Tk):
         # 타겟 분기 유효성 검사
         target = self.story.get_branch(choice.target_id)
         if not target:
-            messagebox.showerror("오류", f"타겟 분기가 존재하지 않습니다: {choice.target_id}")
+            messagebox.showerror(tr("error"), tr("missing_target", id=choice.target_id))
             return
 
         # 현재 스텝에 선택 텍스트 기록
@@ -950,7 +936,7 @@ def main():
         root = tk.Tk()
         root.withdraw()
         file_path = filedialog.askopenfilename(
-            title="소설 파일 선택",
+            title=tr("select_novel"),
             filetypes=[("Branching Novel Files", "*.bnov"), ("All Files", "*.*")]
         )
         root.destroy()
@@ -958,7 +944,7 @@ def main():
             return
 
     if not os.path.isfile(file_path):
-        print("파일을 찾을 수 없습니다:", file_path)
+        print(tr("file_not_found", path=file_path))
         sys.exit(1)
 
     try:
@@ -966,10 +952,10 @@ def main():
         parser = StoryParser()
         story = parser.parse(text)
     except ParseError as e:
-        messagebox.showerror("파싱 오류", str(e))
+        messagebox.showerror(tr("parse_error"), str(e))
         sys.exit(1)
     except Exception as e:
-        messagebox.showerror("오류", f"파일을 읽는 중 오류가 발생했습니다:\n{e}")
+        messagebox.showerror(tr("error"), tr("read_error", err=e))
         sys.exit(1)
 
     app = BranchingNovelApp(story, file_path, show_disabled=story.show_disabled)

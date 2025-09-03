@@ -34,34 +34,35 @@ SetupLogging=yes
 #ifexist "assets\icons\app.ico"
 SetupIconFile=assets\icons\app.ico
 #endif
+DefaultLanguage=english
 
 [Languages]
-Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "바탕화면에 바로가기 만들기"; GroupDescription: "추가 작업:"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
-Name: "{group}\프로그램 제거"; Filename: "{uninstallexe}"
+Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExe}"; Description: "{#MyAppName} 실행"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExe}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [Registry]
-; .bnov 확장자를 {#MyAppExe}에 연결
+; Associate .bnov extension with {#MyAppExe}
 Root: HKCR; Subkey: ".bnov"; ValueType: string; ValueName: ""; ValueData: "BranchingNovelFile"; Flags: uninsdeletevalue
 Root: HKCR; Subkey: "BranchingNovelFile"; ValueType: string; ValueName: ""; ValueData: "Branching Novel Script"; Flags: uninsdeletekey
 Root: HKCR; Subkey: "BranchingNovelFile\DefaultIcon"; ValueType: string; ValueData: "{app}\{#MyAppExe},0"
 Root: HKCR; Subkey: "BranchingNovelFile\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExe}"" ""%1"""
 
 [UninstallDelete]
-; 앱 폴더 내용(파일/하위폴더 전부) 삭제
+; Remove all files and subfolders in app directory
 Type: filesandordirs; Name: "{app}\*"
 
-; 설치 로그까지 함께 정리
+; Remove installation log as well
 Type: files; Name: "{app}\install.log"
 
 [Code]
@@ -74,6 +75,17 @@ begin
          '-NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.Major | Out-Null"',
          '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
     and (ResultCode = 0);
+end;
+ 
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  LangFile: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    LangFile := ExpandConstant('{app}\language.txt');
+    SaveStringToFile(LangFile, ActiveLanguage, False);
+  end;
 end;
 
 procedure EnsureParentDirExists(const FilePath: String);
@@ -100,7 +112,7 @@ begin
   Result := R;
 end;
 
-{ PowerShell에서 사용할 문자열 인용: 항상 단일따옴표로 감싸고 내부 ' 이스케이프 }
+{ Quoting for PowerShell strings: always wrap in single quotes and escape internal ' }
 function PSQuote(const S: String): String;
 begin
   Result := '''' + EscapeForSingleQuotes(S) + '''';
@@ -197,14 +209,14 @@ function ExpandZipToApp(const ZipPath, TargetDir, LogPath: String): Boolean;
 var
   Cmd: String;
 begin
-  { 1) 임시 폴더에 해제(.NET ZipFile)
-    2) 소스 파일 개수 검증
-    3) 대상 폴더 생성
-    4) robocopy 정식 경로 호출 + 인자 배열
-    5) 실패 시 robocopy 로그 꼬리를 install.log에 기록
-    6) robocopy 실패하면 Copy-Item -Path 로 폴백 복사(와일드카드 확장)
-    7) 루트에 EXE 없으면 재배치(하위에서 찾아 루트로 이동)
-    8) 최종 EXE 존재 검증 }
+  { 1) Extract to temp folder (.NET ZipFile)
+    2) Verify number of source files
+    3) Create target folder
+    4) Call robocopy with arguments
+    5) On failure, append tail of robocopy log to install.log
+    6) If robocopy fails, fallback copy via Copy-Item -Path (wildcard expand)
+    7) If no EXE in root, move one from subdirs to root
+    8) Verify final EXE exists }
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
     '$zip = ' + PSQuote(ZipPath) + '; ' +
@@ -231,7 +243,7 @@ begin
     '  Copy-Item -Path (Join-Path $temp ''*'') -Destination $target -Recurse -Force -ErrorAction Stop; ' +
     '} ' +
 
-    { 루트에 EXE가 없으면 하위에서 찾아 루트로 이동 }
+    { If no EXE in root, search in subdirs and move to root }
     '$expectedExe = Join-Path $target ' + PSQuote('{#MyAppExe}') + '; ' +
     'if (-not (Test-Path -LiteralPath $expectedExe)) { ' +
     '  $found = Get-ChildItem -Path $target -Filter ' + PSQuote('{#MyAppExe}') + ' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1; ' +
@@ -259,7 +271,7 @@ begin
     if not IsPSAvailable() then
     begin
       SafeAddToLog(LogPath, 'PowerShell not found');
-      MsgBox('PowerShell을 찾을 수 없습니다. Windows 10/11에서 실행해 주세요.', mbError, MB_OK);
+      MsgBox('PowerShell not found. Please run on Windows 10/11.', mbError, MB_OK);
       WizardForm.Close;
       Exit;
     end;
@@ -269,7 +281,7 @@ begin
     ZipPath := ExpandConstant('{tmp}\payload.zip');
     ShaPath := ExpandConstant('{tmp}\payload.sha256');
 
-    WizardForm.StatusLabel.Caption := '다운로드 및 검증 중...';
+    WizardForm.StatusLabel.Caption := 'Downloading and verifying...';
     try
       WizardForm.ProgressGauge.Style := npbstMarquee;
     except
@@ -280,18 +292,18 @@ begin
     if not Ok then
     begin
       WizardForm.ProgressGauge.Style := npbstNormal;
-      MsgBox('다운로드/무결성 검증 실패. install.log를 확인하세요.', mbError, MB_OK);
+      MsgBox('Download or verification failed. See install.log.', mbError, MB_OK);
       WizardForm.Close;
       Exit;
     end;
 
-    WizardForm.StatusLabel.Caption := '압축 해제 중...';
+    WizardForm.StatusLabel.Caption := 'Extracting...';
     Ok := ExpandZipToApp(ZipPath, ExpandConstant('{app}'), LogPath);
     WizardForm.ProgressGauge.Style := npbstNormal;
 
     if not Ok then
     begin
-      MsgBox('압축 해제 실패. install.log를 확인하세요.', mbError, MB_OK);
+      MsgBox('Extraction failed. See install.log.', mbError, MB_OK);
       WizardForm.Close;
       Exit;
     end;
