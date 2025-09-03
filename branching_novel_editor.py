@@ -36,6 +36,79 @@ from tkinter import ttk, filedialog, messagebox
 from dataclasses import dataclass, field
 from typing import Any, List, Dict, Optional, Tuple, Union
 
+
+class VarAutocomplete:
+    """Helper for inserting ${var} placeholders with autocomplete."""
+
+    def __init__(self, widget: tk.Widget, get_vars):
+        self.widget = widget
+        self.get_vars = get_vars
+        self.popup: Optional[tk.Toplevel] = None
+        self.listbox: Optional[tk.Listbox] = None
+        widget.bind("<KeyRelease>", self._on_key)
+        widget.bind("<FocusOut>", lambda e: self.close())
+
+    def _on_key(self, event):
+        if event.char == "$":
+            self.open()
+
+    def trigger(self):
+        self.widget.focus_set()
+        if isinstance(self.widget, tk.Text):
+            self.widget.insert(tk.INSERT, "$")
+        else:
+            idx = self.widget.index(tk.INSERT)
+            self.widget.insert(idx, "$")
+        self.open()
+
+    def open(self):
+        vars = self.get_vars()
+        if not vars:
+            return
+        self.close()
+        self.popup = tk.Toplevel(self.widget)
+        self.popup.wm_overrideredirect(True)
+        lb = tk.Listbox(self.popup, exportselection=False)
+        lb.pack()
+        for v in vars:
+            lb.insert(tk.END, v)
+        lb.bind("<Return>", self._insert)
+        lb.bind("<Tab>", self._insert)
+        lb.bind("<ButtonRelease-1>", self._insert)
+        lb.bind("<Escape>", lambda e: self.close())
+        lb.focus_set()
+        self.listbox = lb
+        if isinstance(self.widget, tk.Text):
+            bbox = self.widget.bbox(tk.INSERT)
+        else:
+            bbox = self.widget.bbox(self.widget.index(tk.INSERT))
+        if bbox:
+            x = self.widget.winfo_rootx() + bbox[0]
+            y = self.widget.winfo_rooty() + bbox[1] + bbox[3]
+            self.popup.geometry(f"+{x}+{y}")
+
+    def _insert(self, event=None):
+        if not self.listbox:
+            return "break"
+        var = self.listbox.get(tk.ACTIVE)
+        if isinstance(self.widget, tk.Text):
+            idx = self.widget.index(tk.INSERT)
+            self.widget.delete(f"{idx}-1c", idx)
+            self.widget.insert(f"{idx}-1c", f"${{{var}}}")
+        else:
+            idx = self.widget.index(tk.INSERT)
+            self.widget.delete(idx - 1, idx)
+            self.widget.insert(idx - 1, f"${{{var}}}")
+        self.widget.focus_set()
+        self.close()
+        return "break"
+
+    def close(self):
+        if self.popup:
+            self.popup.destroy()
+            self.popup = None
+            self.listbox = None
+
 # ---------- 데이터 모델 ----------
 
 @dataclass
@@ -1163,10 +1236,13 @@ class ChoiceEditor(tk.Toplevel):
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
+        frm.columnconfigure(0, weight=1)
 
         ttk.Label(frm, text="버튼 문구").grid(row=0, column=0, sticky="w")
         self.ent_text = ttk.Entry(frm, width=50)
-        self.ent_text.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0,8))
+        self.ent_text.grid(row=1, column=0, sticky="ew", pady=(0,8))
+        self.auto_text = VarAutocomplete(self.ent_text, lambda: self.variables)
+        ttk.Button(frm, text="$", width=2, command=self.auto_text.trigger).grid(row=1, column=1, padx=(4,0))
 
         ttk.Label(frm, text="이동 타깃 분기 ID").grid(row=2, column=0, sticky="w")
         self.cmb_target = ttk.Combobox(frm, values=branch_ids, state="readonly", width=30)
@@ -1332,6 +1408,8 @@ class ChapterEditor(tk.Tk):
         self.ent_title.grid(row=0, column=1, sticky="ew", pady=(0, 6))
         self.ent_title.insert(0, self.story.title)
         self.ent_title.bind("<KeyRelease>", lambda e: self._on_title_changed())
+        self.auto_title = VarAutocomplete(self.ent_title, lambda: self._collect_variables())
+        ttk.Button(meta, text="$", width=2, command=self.auto_title.trigger).grid(row=0, column=2, padx=(4, 0))
 
         ttk.Label(meta, text="시작 분기(@start)").grid(row=1, column=0, sticky="w")
         self.cmb_start = ttk.Combobox(meta, values=[], state="readonly")
@@ -1343,6 +1421,8 @@ class ChapterEditor(tk.Tk):
         self.ent_end.grid(row=2, column=1, sticky="ew")
         self.ent_end.insert(0, self.story.ending_text)
         self.ent_end.bind("<KeyRelease>", lambda e: self._on_ending_changed())
+        self.auto_end = VarAutocomplete(self.ent_end, lambda: self._collect_variables())
+        ttk.Button(meta, text="$", width=2, command=self.auto_end.trigger).grid(row=2, column=2, padx=(4, 0))
 
         self.var_show_disabled = tk.BooleanVar(value=self.story.show_disabled)
         self.chk_show_disabled = ttk.Checkbutton(
@@ -1430,6 +1510,8 @@ class ChapterEditor(tk.Tk):
         self.ent_ch_title.grid(row=1, column=1, sticky="ew", pady=(0, 6))
         self.ent_ch_title.bind("<FocusOut>", lambda e: self._apply_chapter_id_title())
         self.ent_ch_title.bind("<Return>", lambda e: self._apply_chapter_id_title())
+        self.auto_ch_title = VarAutocomplete(self.ent_ch_title, lambda: self._collect_variables())
+        ttk.Button(edit_tab, text="$", width=2, command=self.auto_ch_title.trigger).grid(row=1, column=2, padx=(4, 0))
 
         ttk.Label(edit_tab, text="분기 ID").grid(row=2, column=0, sticky="w")
         self.ent_br_id = ttk.Entry(edit_tab)
@@ -1442,10 +1524,12 @@ class ChapterEditor(tk.Tk):
         self.ent_br_title.grid(row=3, column=1, sticky="ew", pady=(0, 6))
         self.ent_br_title.bind("<FocusOut>", lambda e: self._apply_branch_id_title())
         self.ent_br_title.bind("<Return>", lambda e: self._apply_branch_id_title())
+        self.auto_br_title = VarAutocomplete(self.ent_br_title, lambda: self._collect_variables())
+        ttk.Button(edit_tab, text="$", width=2, command=self.auto_br_title.trigger).grid(row=3, column=2, padx=(4, 0))
 
         # 본문
         body_frame = ttk.LabelFrame(edit_tab, text="본문(빈 줄로 문단 구분)", padding=6)
-        body_frame.grid(row=4, column=0, columnspan=2, sticky="nsew")
+        body_frame.grid(row=4, column=0, columnspan=3, sticky="nsew")
         body_frame.rowconfigure(0, weight=1)
         body_frame.columnconfigure(0, weight=1)
 
@@ -1456,11 +1540,13 @@ class ChapterEditor(tk.Tk):
         scr = ttk.Scrollbar(body_frame, orient="vertical", command=self.txt_body.yview)
         scr.grid(row=0, column=1, sticky="ns")
         self.txt_body.configure(yscrollcommand=scr.set)
+        self.auto_body = VarAutocomplete(self.txt_body, lambda: self._collect_variables())
+        ttk.Button(body_frame, text="$", width=2, command=self.auto_body.trigger).grid(row=0, column=2, padx=(4, 0), sticky="ns")
         self.txt_body.bind("<<Modified>>", self._on_body_modified)
 
         # 선택지 편집
         choices_frame = ttk.LabelFrame(edit_tab, text="선택지(버튼)", padding=6)
-        choices_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        choices_frame.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         choices_frame.columnconfigure(0, weight=1)
 
         self.tree_choices = ttk.Treeview(choices_frame, columns=("text", "target"), show="headings", height=6)

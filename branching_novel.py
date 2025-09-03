@@ -490,8 +490,9 @@ class BranchingNovelApp(tk.Tk):
         self.chapter_list.delete(0, tk.END)
         for cid in self.visited_chapters:
             ch = self.story.get_chapter(cid)
-            title = ch.title if ch and ch.title else cid
-            self.chapter_list.insert(tk.END, title)
+            title = self._interpolate(ch.title) if ch and ch.title else ""
+            item = f"{cid} | {title}" if title else cid
+            self.chapter_list.insert(tk.END, item)
         self.chapter_list.configure(state="disabled")
 
     def _go_prev_chapter(self, event=None):
@@ -577,7 +578,7 @@ class BranchingNovelApp(tk.Tk):
             if not br:
                 continue
             if br.paragraphs:
-                lines.append("\n".join(br.paragraphs))
+                lines.append("\n".join(self._interpolate(p) for p in br.paragraphs))
             if i + 1 < end and step.chosen_text:
                 lines.append(f"> {step.chosen_text}")
         text = "\n".join(lines) if lines else "(내용 없음)"
@@ -599,6 +600,9 @@ class BranchingNovelApp(tk.Tk):
         if not self.history:
             return
         self.state = self._compute_state(self.current_index)
+        title = self._interpolate(self.story.title)
+        self.title(f"{title} - Branching Novel")
+        self.title_label.configure(text=title)
         self._render_page(self.chapter_page_index)
 
     def _current_branch(self) -> Optional[Branch]:
@@ -630,7 +634,7 @@ class BranchingNovelApp(tk.Tk):
                 display.append((choice, True))
 
         if not display or all(disabled for _, disabled in display):
-            lbl = ttk.Label(self.choice_frame, text=self.story.ending_text)
+            lbl = ttk.Label(self.choice_frame, text=self._interpolate(self.story.ending_text))
             lbl.grid(row=0, column=0, sticky="w")
             exit_btn = ttk.Button(self.choice_frame, text="나가기", command=self.destroy)
             exit_btn.grid(row=1, column=0, sticky="ew", pady=2)
@@ -638,7 +642,8 @@ class BranchingNovelApp(tk.Tk):
 
         # 버튼 생성
         for idx, (choice, disabled) in enumerate(display, 1):
-            btn = ttk.Button(self.choice_frame, text=f"{idx}. {choice.text}",
+            txt = self._interpolate(choice.text)
+            btn = ttk.Button(self.choice_frame, text=f"{idx}. {txt}",
                              command=lambda c=choice: self._choose(c))
             if disabled:
                 btn.state(["disabled"])
@@ -654,7 +659,7 @@ class BranchingNovelApp(tk.Tk):
         # 현재 스텝에 선택 텍스트 기록
         if 0 <= self.current_index < len(self.history):
             cur = self.history[self.current_index]
-            cur.chosen_text = choice.text
+            cur.chosen_text = self._interpolate(choice.text)
             self.history[self.current_index] = cur
 
         # 미래 히스토리 절단 후 다음 스텝 추가
@@ -681,7 +686,7 @@ class BranchingNovelApp(tk.Tk):
         parts: List[str] = []
         for i, step in enumerate(self.history):
             br = self.story.get_branch(step.branch_id)
-            name = br.title if br and br.title else step.branch_id
+            name = self._interpolate(br.title) if br and br.title else step.branch_id
             if step.chosen_text:
                 parts.append(f"{name}({step.chosen_text})")
             else:
@@ -733,6 +738,14 @@ class BranchingNovelApp(tk.Tk):
                 elif act.op == "pow":
                     state[act.var] = cur ** val
         return state
+
+    def _interpolate(self, text: str) -> str:
+        pattern = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+        def repl(m: re.Match[str]) -> str:
+            var = m.group(1)
+            val = self.state.get(var, self.story.variables.get(var, ""))
+            return str(val)
+        return pattern.sub(repl, text)
 
     def _evaluate_condition(self, cond: str) -> bool:
         expr = self._to_python_expr(cond)
