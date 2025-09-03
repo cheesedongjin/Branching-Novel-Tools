@@ -1,4 +1,4 @@
-; installer.iss - Online Bootstrap Installer (공용)
+; installer.iss - Online Bootstrap Installer (공용, 전체 완전본)
 
 #ifndef MyAppName
   #define MyAppName "MyApp"
@@ -48,7 +48,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: deskto
 Filename: "{app}\{#MyAppExe}"; Description: "{#MyAppName} 실행"; Flags: nowait postinstall skipifsilent
 
 [Registry]
-; .bnov 확장자를 Branching Novel GUI에 연결
+; .bnov 확장자를 {#MyAppExe}에 연결
 Root: HKCR; Subkey: ".bnov"; ValueType: string; ValueName: ""; ValueData: "BranchingNovelFile"; Flags: uninsdeletevalue
 Root: HKCR; Subkey: "BranchingNovelFile"; ValueType: string; ValueName: ""; ValueData: "Branching Novel Script"; Flags: uninsdeletekey
 Root: HKCR; Subkey: "BranchingNovelFile\DefaultIcon"; ValueType: string; ValueData: "{app}\{#MyAppExe},0"
@@ -59,85 +59,132 @@ function IsPSAvailable(): Boolean;
 var
   ResultCode: Integer;
 begin
-  Result := Exec('powershell.exe', '-NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.Major"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := Exec('powershell.exe',
+                 '-NoLogo -NoProfile -Command "$PSVersionTable.PSVersion.Major | Out-Null"',
+                 '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
 end;
 
-procedure AddToLog(const LogPath, Line: String);
+function SafeAddToLog(const LogPath, Line: String): Boolean;
 begin
-  SaveStringToFile(LogPath, Line + #13#10, True);
+  Result := SaveStringToFile(LogPath, Line + #13#10, True);
 end;
 
-function RunPSLog(const Cmd, LogPath: String): Boolean;
+procedure EnsureParentDirExists(const FilePath: String);
+var
+  Dir: String;
+begin
+  Dir := ExtractFileDir(FilePath);
+  if (Dir <> '') and (not DirExists(Dir)) then
+    ForceDirectories(Dir);
+end;
+
+function EscapeForSingleQuotes(const S: String): String;
+var
+  R: String;
+begin
+  R := S;
+  { ' -> '' }
+  StringChangeEx(R, '''', '''''', True);
+  Result := R;
+end;
+
+function WriteAndRunPS(const Cmd, LogPath, ScriptNameHint: String): Boolean;
 var
   ResultCode: Integer;
-  PSArgs, FullCmd, EscapedCmd: String;
+  PSExe, PSArgs, ScriptPath, ScriptBody, EscapedCmd: String;
+  StartOk: Boolean;
 begin
-  PSArgs := '-NoLogo -NoProfile -ExecutionPolicy Bypass -Command ';
+  Result := False;
 
-  { StringChange / StringChangeEx 는 문자열을 반환하지 않습니다.
-    복사본을 만든 뒤 그 복사본의 따옴표를 이스케이프 처리합니다. }
-  EscapedCmd := Cmd;
-  StringChangeEx(EscapedCmd, '''', '''''', True);  { ' → '' }
+  EnsureParentDirExists(LogPath);
+  SafeAddToLog(LogPath, '---');
+  SafeAddToLog(LogPath, 'CREATE PS SCRIPT FOR: ' + ScriptNameHint);
 
-  FullCmd :=
-    '$ErrorActionPreference=''Stop''; ' +
-    'Add-Content -Path ' + AddQuotes(LogPath) + ' -Value ''CMD: ' + EscapedCmd + '''; ' +
-    Cmd + '; ' +
-    'Add-Content -Path ' + AddQuotes(LogPath) + ' -Value ''OK''';
+  PSExe := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  if not FileExists(PSExe) then
+    PSExe := 'powershell.exe';
 
-  Result := Exec('powershell.exe', PSArgs + AddQuotes(FullCmd), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  if not Result then
-    AddToLog(LogPath, 'PS ERROR code=' + IntToStr(ResultCode));
-  Result := Result and (ResultCode = 0);
-end;
+  ScriptPath := GetTempFileName;  { e.g., C:\Users\...\AppData\Local\Temp\is-XXXX.tmp }
+  if FileExists(ScriptPath) then
+    DeleteFile(ScriptPath);
+  ScriptPath := ScriptPath + '-' + ScriptNameHint + '.ps1';
 
-function DownloadAndVerify(const UrlZip, UrlSha, DestZip, DestSha: String): Boolean;
-var
-  Cmd, LogPath: String;
-begin
-  LogPath := ExpandConstant('{app}\install.log');
+  EscapedCmd := EscapeForSingleQuotes(Cmd);
 
-  Cmd :=
-    '$ErrorActionPreference=''Stop''; ' +
-    '[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; ' +
-    'Invoke-WebRequest -UseBasicParsing -Uri ' + AddQuotes(UrlZip) + ' -OutFile ' + AddQuotes(DestZip) + '; ' +
-    'Invoke-WebRequest -UseBasicParsing -Uri ' + AddQuotes(UrlSha) + ' -OutFile ' + AddQuotes(DestSha) + ';';
+  { PowerShell 스크립트: 단계 로그 + 예외 메시지/위치 기록 + 종료코드 }
+  ScriptBody :=
+    '$ErrorActionPreference = ''Stop'';' + #13#10 +
+    '$Log = ' + AddQuotes(LogPath) + ';' + #13#10 +
+    'try {' + #13#10 +
+    '  Add-Content -LiteralPath $Log -Value ''CMD: ' + EscapedCmd + ''';' + #13#10 +
+    '  ' + Cmd + #13#10 +
+    '  Add-Content -LiteralPath $Log -Value ''OK'';' + #13#10 +
+    '} catch {' + #13#10 +
+    '  try { Add-Content -LiteralPath $Log -Value (''ERROR: '' + $_.Exception.Message) } catch {}' + #13#10 +
+    '  if ($_.InvocationInfo -ne $null) {' + #13#10 +
+    '    try { Add-Content -LiteralPath $Log -Value (''AT: '' + $_.InvocationInfo.PositionMessage) } catch {}' + #13#10 +
+    '  }' + #13#10 +
+    '  exit 1' + #13#10 +
+    '}';
 
-  if not RunPSLog(Cmd, LogPath) then
+  EnsureParentDirExists(ScriptPath);
+  if not SaveStringToFile(ScriptPath, ScriptBody, False) then
   begin
-    Result := False;
-    exit;
+    SafeAddToLog(LogPath, 'ERROR: Failed to create PS script at ' + ScriptPath);
+    Exit;
   end;
 
-  Cmd :=
-    '$ErrorActionPreference=''Stop''; ' +
-    '$expected = (Get-Content -Path ' + AddQuotes(DestSha) + ' | Select-Object -First 1).Split('' '')[0]; ' +
-    '$actual = (Get-FileHash -Path ' + AddQuotes(DestZip) + ' -Algorithm SHA256).Hash.ToLower(); ' +
-    'if ($expected.ToLower() -ne $actual) { throw ''Hash mismatch. Expected: '' + $expected + '', Actual: '' + $actual }';
+  PSArgs := '-NoLogo -NoProfile -ExecutionPolicy Bypass -File ';
+  StartOk := Exec(PSExe, PSArgs + AddQuotes(ScriptPath), '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-  if not RunPSLog(Cmd, LogPath) then
+  if not StartOk then
   begin
-    Result := False;
-    exit;
+    SafeAddToLog(LogPath, 'PS START ERROR code=' + IntToStr(ResultCode) + ' msg=' + SysErrorMessage(ResultCode));
+    Exit;
+  end;
+
+  if ResultCode <> 0 then
+  begin
+    SafeAddToLog(LogPath, 'PS EXIT CODE=' + IntToStr(ResultCode));
+    Exit;
   end;
 
   Result := True;
 end;
 
-function ExpandZipToApp(const ZipPath, TargetDir: String): Boolean;
+function DownloadAndVerify(const UrlZip, UrlSha, DestZip, DestSha, LogPath: String): Boolean;
 var
-  Cmd, LogPath: String;
+  Cmd: String;
 begin
-  LogPath := ExpandConstant('{app}\install.log');
-
+  { 두 파일 모두 다운로드 후 SHA256 검증 }
   Cmd :=
-    '$ErrorActionPreference=''Stop''; ' +
-    'if (-not (Test-Path -Path ' + AddQuotes(TargetDir) + ')) { New-Item -ItemType Directory -Path ' + AddQuotes(TargetDir) + ' | Out-Null }; ' +
-    'try { Expand-Archive -LiteralPath ' + AddQuotes(ZipPath) + ' -DestinationPath ' + AddQuotes(TargetDir) + ' -Force } ' +
-    'catch { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory(' +
-      AddQuotes(ZipPath) + ', ' + AddQuotes(TargetDir) + ') }';
+    '$ErrorActionPreference = ''Stop''; ' +
+    '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ' +
+    'Invoke-WebRequest -Uri ' + AddQuotes(UrlZip) + ' -OutFile ' + AddQuotes(DestZip) + '; ' +
+    'Invoke-WebRequest -Uri ' + AddQuotes(UrlSha) + ' -OutFile ' + AddQuotes(DestSha) + '; ' +
+    '$expected = (Get-Content -LiteralPath ' + AddQuotes(DestSha) + ' | Select-Object -First 1).Split('' '')[0]; ' +
+    'if ([string]::IsNullOrWhiteSpace($expected)) { throw ''Empty SHA file'' } ' +
+    '$actual = (Get-FileHash -LiteralPath ' + AddQuotes(DestZip) + ' -Algorithm SHA256).Hash.ToLower(); ' +
+    'if ($expected.ToLower() -ne $actual) { throw (''Hash mismatch. Expected: '' + $expected + '', Actual: '' + $actual) }';
 
-  Result := RunPSLog(Cmd, LogPath);
+  Result := WriteAndRunPS(Cmd, LogPath, 'download_verify');
+end;
+
+function ExpandZipToApp(const ZipPath, TargetDir, LogPath: String): Boolean;
+var
+  Cmd: String;
+begin
+  Cmd :=
+    '$ErrorActionPreference = ''Stop''; ' +
+    'if (-not (Test-Path -LiteralPath ' + AddQuotes(TargetDir) + ')) { New-Item -ItemType Directory -Path ' + AddQuotes(TargetDir) + ' | Out-Null }; ' +
+    'try { ' +
+    '  Expand-Archive -LiteralPath ' + AddQuotes(ZipPath) + ' -DestinationPath ' + AddQuotes(TargetDir) + ' -Force ' +
+    '} catch { ' +
+    '  Add-Type -AssemblyName System.IO.Compression.FileSystem; ' +
+    '  [System.IO.Compression.ZipFile]::ExtractToDirectory(' + AddQuotes(ZipPath) + ', ' + AddQuotes(TargetDir) + '); ' +
+    '}';
+
+  Result := WriteAndRunPS(Cmd, LogPath, 'expand_zip');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -147,43 +194,49 @@ var
 begin
   if CurStep = ssInstall then
   begin
+    LogPath := ExpandConstant('{app}\install.log');
+
     if not IsPSAvailable() then
     begin
-      AddToLog(ExpandConstant('{app}\install.log'), 'PowerShell not found');
+      SafeAddToLog(LogPath, 'PowerShell not found');
       MsgBox('PowerShell을 찾을 수 없습니다. Windows 10/11에서 실행해 주세요.', mbError, MB_OK);
       WizardForm.Close;
-      exit;
+      Exit;
     end;
 
-    LogPath := ExpandConstant('{app}\install.log');
-    AddToLog(LogPath, 'BEGIN INSTALL');
+    SafeAddToLog(LogPath, 'BEGIN INSTALL');
 
     ZipPath := ExpandConstant('{tmp}\payload.zip');
     ShaPath := ExpandConstant('{tmp}\payload.sha256');
 
-    WizardForm.StatusLabel.Caption := '다운로드 중...';
-    WizardForm.ProgressGauge.Style := npbstMarquee;
+    WizardForm.StatusLabel.Caption := '다운로드 및 검증 중...';
+    try
+      WizardForm.ProgressGauge.Style := npbstMarquee;
+    except
+      { 구버전 테마 호환 }
+      WizardForm.ProgressGauge.Style := npbstNormal;
+    end;
 
-    Ok := DownloadAndVerify('{#PayloadZipURL}', '{#PayloadShaURL}', ZipPath, ShaPath);
+    Ok := DownloadAndVerify('{#PayloadZipURL}', '{#PayloadShaURL}', ZipPath, ShaPath, LogPath);
     if not Ok then
     begin
       WizardForm.ProgressGauge.Style := npbstNormal;
       MsgBox('다운로드/무결성 검증 실패. install.log를 확인하세요.', mbError, MB_OK);
       WizardForm.Close;
-      exit;
+      Exit;
     end;
 
     WizardForm.StatusLabel.Caption := '압축 해제 중...';
-    Ok := ExpandZipToApp(ZipPath, ExpandConstant('{app}'));
+    Ok := ExpandZipToApp(ZipPath, ExpandConstant('{app}'), LogPath);
     WizardForm.ProgressGauge.Style := npbstNormal;
 
     if not Ok then
     begin
       MsgBox('압축 해제 실패. install.log를 확인하세요.', mbError, MB_OK);
       WizardForm.Close;
-      exit;
+      Exit;
     end;
 
-    AddToLog(LogPath, 'END OK');
+    SafeAddToLog(LogPath, 'END OK');
   end;
 end;
