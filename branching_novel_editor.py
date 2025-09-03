@@ -666,7 +666,9 @@ class BranchingNovelApp(tk.Tk):
                 lines.append("\n".join(br.paragraphs))
             if i + 1 < end and step.chosen_text:
                 lines.append(f"> {step.chosen_text}")
-        text = "\n".join(lines) if lines else tr("no_content")
+        text = "\n".join(lines)
+        if not text:
+            text = tr("no_content")
         self._set_text_content(text)
         if page_index == len(self.chapter_positions) - 1:
             last_branch = self.story.get_branch(self.history[end - 1].branch_id)
