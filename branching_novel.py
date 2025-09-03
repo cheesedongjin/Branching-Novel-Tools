@@ -66,7 +66,7 @@ from typing import List, Dict, Optional, Tuple, Union, Any
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from i18n import tr
+from i18n import tr, set_language, set_language_from_file
 
 from auto_update import check_for_update
 
@@ -928,7 +928,14 @@ def load_text_from_file(path: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Branching Novel GUI")
     parser.add_argument("file", nargs="?", help="Story file path (.bnov)")
+    parser.add_argument("--lang", help="language code (e.g., en, ko)")
     args = parser.parse_args()
+
+    if args.lang:
+        set_language(args.lang)
+    else:
+        lang_file = os.path.join(os.path.dirname(__file__), "game_language.txt")
+        set_language_from_file(lang_file)
 
     file_path = args.file
     if not file_path:

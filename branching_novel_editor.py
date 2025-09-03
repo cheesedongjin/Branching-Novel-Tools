@@ -32,10 +32,11 @@ import os
 import sys
 import re
 import ast
+import argparse
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from i18n import tr
+from i18n import tr, set_language, set_language_from_file
 from dataclasses import dataclass, field
 from typing import Any, List, Dict, Optional, Tuple, Union
 
@@ -3043,6 +3044,16 @@ class ChapterEditor(tk.Tk):
 # ---------- 진입점 ----------
 
 def main():
+    parser = argparse.ArgumentParser(description="Branching Novel Editor")
+    parser.add_argument("--lang", help="language code (e.g., en, ko)")
+    args = parser.parse_args()
+
+    if args.lang:
+        set_language(args.lang)
+    else:
+        lang_file = os.path.join(os.path.dirname(__file__), "editor_language.txt")
+        set_language_from_file(lang_file)
+
     app = ChapterEditor()
     check_for_update(APP_NAME, INSTALLER_NAME, parent=app)
     app.mainloop()

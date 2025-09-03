@@ -80,15 +80,18 @@ end;
  
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  LangFile: String;
+  Lang, Base: String;
 begin
   if CurStep = ssPostInstall then
   begin
-    LangFile := ExpandConstant('{app}\language.txt');
     if ActiveLanguage = 'korean' then
-      SaveStringToFile(LangFile, 'korean', False);
+      Lang := 'ko'
     else
-      SaveStringToFile(LangFile, 'en', False);
+      Lang := 'en';
+    Base := ExpandConstant('{app}\');
+    SaveStringToFile(Base + 'language.txt', Lang, False);
+    SaveStringToFile(Base + 'editor_language.txt', Lang, False);
+    SaveStringToFile(Base + 'game_language.txt', Lang, False);
   end;
 end;
 
