@@ -1,4 +1,4 @@
-; installer.iss - Online Bootstrap Installer (공용)
+; installer.iss - Online Bootstrap Installer (공용, 최종 완전본)
 
 #ifndef MyAppName
   #define MyAppName "MyApp"
@@ -121,15 +121,17 @@ begin
   ScriptBody :=
     '$ErrorActionPreference = ''Stop'';' + #13#10 +
     '$Log = ' + AddQuotes(LogPath) + ';' + #13#10 +
+    '$TmpLog = Join-Path $env:TEMP ("installer_' + ScriptNameHint + '_log.txt");' + #13#10 +
+    'function Write-Log($s){' + #13#10 +
+    '  try { Add-Content -LiteralPath $Log -Value $s } catch { try { Add-Content -LiteralPath $TmpLog -Value $s } catch {} }' + #13#10 +
+    '}' + #13#10 +
     'try {' + #13#10 +
-    '  Add-Content -LiteralPath $Log -Value ''CMD: ' + EscapedCmd + ''';' + #13#10 +
+    '  Write-Log ''CMD: ' + EscapedCmd + ''';' + #13#10 +
     '  ' + Cmd + #13#10 +
-    '  Add-Content -LiteralPath $Log -Value ''OK'';' + #13#10 +
+    '  Write-Log ''OK'';' + #13#10 +
     '} catch {' + #13#10 +
-    '  try { Add-Content -LiteralPath $Log -Value (''ERROR: '' + $_.Exception.Message) } catch {}' + #13#10 +
-    '  if ($_.InvocationInfo -ne $null) {' + #13#10 +
-    '    try { Add-Content -LiteralPath $Log -Value (''AT: '' + $_.InvocationInfo.PositionMessage) } catch {}' + #13#10 +
-    '  }' + #13#10 +
+    '  Write-Log (''ERROR: '' + $_.Exception.Message);' + #13#10 +
+    '  if ($_.InvocationInfo -ne $null) { Write-Log (''AT: '' + $_.InvocationInfo.PositionMessage) }' + #13#10 +
     '  exit 1' + #13#10 +
     '}';
 
@@ -178,36 +180,25 @@ end;
 function ExpandZipToApp(const ZipPath, TargetDir, LogPath: String): Boolean;
 var
   Cmd: String;
-  TempExtractDir: String;
 begin
-  TempExtractDir := ExpandConstant('{tmp}\extracted');
+  { 1) 임시 폴더에 먼저 해제 (.NET ZipFile 사용)
+    2) 대상 폴더 생성
+    3) robocopy /E /R:1 /W:1 /COPY:DAT 로 복사, 종료코드 8 이상이면 실패 }
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
-    #13#10 +
-    '# Create temp extract directory' + #13#10 +
-    '$TempDir = ' + AddQuotes(TempExtractDir) + '; ' +
-    'if (Test-Path -LiteralPath $TempDir) { Remove-Item -LiteralPath $TempDir -Recurse -Force -ErrorAction SilentlyContinue }; ' +
-    'New-Item -ItemType Directory -Path $TempDir -Force | Out-Null; ' +
-    #13#10 +
-    '# Extract ZIP to temp directory' + #13#10 +
-    'try {' + #13#10 +
-    '  Expand-Archive -LiteralPath ' + AddQuotes(ZipPath) + ' -DestinationPath $TempDir -Force; ' +
-    '} catch {' + #13#10 +
-    '  Add-Type -AssemblyName System.IO.Compression.FileSystem; ' +
-    '  [System.IO.Compression.ZipFile]::ExtractToDirectory(' + AddQuotes(ZipPath) + ', $TempDir); ' +
-    '}; ' +
-    #13#10 +
-    '# Create target directory if not exists' + #13#10 +
-    'if (-not (Test-Path -LiteralPath ' + AddQuotes(TargetDir) + ')) { New-Item -ItemType Directory -Path ' + AddQuotes(TargetDir) + ' -Force | Out-Null }; ' +
-    #13#10 +
-    '# Copy files to target using robocopy' + #13#10 +
-    '$RoboArgs = @(''' + TempExtractDir + ''', ''' + TargetDir + ''', ''/MIR'', ''/R:3'', ''/W:5''); ' +
-    '$Proc = Start-Process -FilePath ''robocopy'' -ArgumentList $RoboArgs -NoNewWindow -PassThru -Wait; ' +
-    '# robocopy exit codes 0-7 are success or minor issues (e.g., skipped files)' + #13#10 +
-    'if ($Proc.ExitCode -gt 7) { throw (''robocopy failed with exit code '' + $Proc.ExitCode) }; ' +
-    #13#10 +
-    '# Clean up temp directory' + #13#10 +
-    'Remove-Item -LiteralPath $TempDir -Recurse -Force -ErrorAction SilentlyContinue;';
+    '$zip = ' + AddQuotes(ZipPath) + '; ' +
+    '$target = ' + AddQuotes(TargetDir) + '; ' +
+    '$temp = Join-Path $env:TEMP (''payload_'' + [guid]::NewGuid().ToString()); ' +
+    'New-Item -ItemType Directory -Path $temp | Out-Null; ' +
+    'Add-Type -AssemblyName System.IO.Compression.FileSystem; ' +
+    '[System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $temp); ' +
+    'if (-not (Test-Path -LiteralPath $target)) { New-Item -ItemType Directory -Path $target | Out-Null }; ' +
+    '$robolog = Join-Path $env:TEMP (''robocopy_'' + [guid]::NewGuid().ToString() + ''.log''); ' +
+    'Start-Process -FilePath cmd.exe -ArgumentList @("/c","robocopy", ' +
+      '$temp, $target, "/E","/R:1","/W:1","/NFL","/NDL","/NP","/NJH","/NJS","/COPY:DAT", ' +
+      '">`"$robolog`"","2>&1") -NoNewWindow -Wait; ' +
+    '$code = $LASTEXITCODE; ' +
+    'if ($code -ge 8) { throw ("robocopy failed with exit code " + $code + ". Log: " + $robolog) }';
 
   Result := WriteAndRunPS(Cmd, LogPath, 'expand_zip');
 end;
@@ -250,13 +241,13 @@ begin
       Exit;
     end;
 
-    WizardForm.StatusLabel.Caption := '압축 해제 및 파일 복사 중...';
+    WizardForm.StatusLabel.Caption := '압축 해제 중...';
     Ok := ExpandZipToApp(ZipPath, ExpandConstant('{app}'), LogPath);
     WizardForm.ProgressGauge.Style := npbstNormal;
 
     if not Ok then
     begin
-      MsgBox('압축 해제 또는 파일 복사 실패. install.log를 확인하세요.', mbError, MB_OK);
+      MsgBox('압축 해제 실패. install.log를 확인하세요.', mbError, MB_OK);
       WizardForm.Close;
       Exit;
     end;
