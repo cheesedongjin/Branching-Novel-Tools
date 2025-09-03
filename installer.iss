@@ -1,4 +1,4 @@
-; installer.iss - Online Bootstrap Installer (공용, 전체 완전본)
+; installer.iss - Online Bootstrap Installer (공용)
 
 #ifndef MyAppName
   #define MyAppName "MyApp"
@@ -66,18 +66,20 @@ begin
     and (ResultCode = 0);
 end;
 
-function SafeAddToLog(const LogPath, Line: String): Boolean;
-begin
-  Result := SaveStringToFile(LogPath, Line + #13#10, True);
-end;
-
 procedure EnsureParentDirExists(const FilePath: String);
 var
   Dir: String;
 begin
-  Dir := ExtractFileDir(FilePath);
+  { Inno에서는 ExtractFilePath 사용 }
+  Dir := ExtractFilePath(FilePath);
   if (Dir <> '') and (not DirExists(Dir)) then
-    ForceDirectories(Dir);
+    CreateDir(Dir);  { 필요한 최종 폴더만 생성 (Program Files는 이미 존재) }
+end;
+
+function SafeAddToLog(const LogPath, Line: String): Boolean;
+begin
+  EnsureParentDirExists(LogPath);
+  Result := SaveStringToFile(LogPath, Line + #13#10, True);
 end;
 
 function EscapeForSingleQuotes(const S: String): String;
@@ -85,16 +87,22 @@ var
   R: String;
 begin
   R := S;
-  StringChangeEx(R, '''', '''''', True);  { ' -> '' }
+  { ' -> '' (StringChangeEx 대신 StringChange 사용, 반환값 무시) }
+  StringChange(R, '''', '''''');
   Result := R;
 end;
 
 function MakeTempScriptFile(const Hint: String): String;
 var
-  Base: String;
+  Stamp: String;
 begin
-  Base := ExpandConstant('{tmp}\installer_' + Hint + '_' + IntToStr(Random(1000000)) + '.ps1');
-  Result := Base;
+  { 시간 스탬프 + 난수로 충돌 회피 }
+  Stamp := GetDateTimeString('yyyymmddhhnnss', '', '');
+  repeat
+    Result := ExpandConstant(
+      '{tmp}\installer_' + Hint + '_' + Stamp + '_' + IntToStr(Random(1000000)) + '.ps1'
+    );
+  until not FileExists(Result);
 end;
 
 function WriteAndRunPS(const Cmd, LogPath, ScriptNameHint: String): Boolean;
@@ -114,9 +122,9 @@ begin
     PSExe := 'powershell.exe';
 
   ScriptPath := MakeTempScriptFile(ScriptNameHint);
-
   EscapedCmd := EscapeForSingleQuotes(Cmd);
 
+  { PowerShell 스크립트: 단계 로그 + 예외 메시지/위치 기록 + 종료코드 }
   ScriptBody :=
     '$ErrorActionPreference = ''Stop'';' + #13#10 +
     '$Log = ' + AddQuotes(LogPath) + ';' + #13#10 +
