@@ -218,7 +218,7 @@ begin
     '$robocopyPath = Join-Path $env:WINDIR "System32\\robocopy.exe"; ' +
     'if (-not (Test-Path -LiteralPath $robocopyPath)) { $robocopyPath = "robocopy.exe" } ' +
     '$robolog = Join-Path $env:TEMP (''robocopy_'' + [guid]::NewGuid().ToString() + ''.log''); ' +
-    '$args = @($temp, $target, "/E","/R:1","/W:1","/NFL","/NDL","/NP","/NJH","/NJS","/COPY:DAT", "/LOG:" + $robolog); ' +
+    '$args = @($temp, $target, "/E","/R:1","/W:1","/NFL","/NDL","/NP","/NJH","/NJS","/COPY:DAT", "/MIR", "/LOG:" + $robolog); ' +
     '$p = Start-Process -FilePath $robocopyPath -ArgumentList $args -NoNewWindow -PassThru -Wait; ' +
     '$code = $p.ExitCode; ' +
     'if ($code -ge 8) { ' +
