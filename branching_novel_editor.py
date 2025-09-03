@@ -1008,7 +1008,7 @@ class BranchingNovelApp(tk.Tk):
 class ConditionRowDialog(tk.Toplevel):
     def __init__(self, master, variables: List[str], initial: Optional[Tuple[str, str, str]]):
         super().__init__(master)
-        self.title("조건/행동")
+        self.title(tr("condition_action_title"))
         self.resizable(False, False)
         self.result_ok = False
         self.condition: Optional[Tuple[str, str, str]] = None
@@ -1016,32 +1016,25 @@ class ConditionRowDialog(tk.Toplevel):
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
 
-        ttk.Label(frm, text="변수").grid(row=0, column=0, sticky="w")
+        ttk.Label(frm, text=tr("variable")).grid(row=0, column=0, sticky="w")
         self.cmb_var = ttk.Combobox(frm, values=variables, state="readonly", width=20)
         self.cmb_var.grid(row=1, column=0, sticky="ew", pady=(0,8))
 
-        ttk.Label(frm, text="연산자").grid(row=0, column=1, sticky="w", padx=(8,0))
+        ttk.Label(frm, text=tr("operator")).grid(row=0, column=1, sticky="w", padx=(8,0))
         ops = ["==", "!=", ">", "<", ">=", "<=", "=", "+=", "-=", "*=", "/=", "//=", "%=", "**="]
         self.cmb_op = ttk.Combobox(frm, values=ops, state="readonly", width=7)
         self.cmb_op.grid(row=1, column=1, sticky="w", padx=(8,0))
 
-        ttk.Label(frm, text="값").grid(row=0, column=2, sticky="w", padx=(8,0))
+        ttk.Label(frm, text=tr("value")).grid(row=0, column=2, sticky="w", padx=(8,0))
         self.ent_val = ttk.Entry(frm, width=15)
         self.ent_val.grid(row=1, column=2, sticky="ew", padx=(8,0))
 
-        help_text = (
-            "연산자 표:\n"
-            "=  : 대입\n"
-            "+= : 더해서 대입, -= : 빼서 대입, *= : 곱해서 대입, /= : 나누어 대입\n"
-            "//= : 몫만 대입, %= : 나머지 대입, **= : 거듭제곱 대입\n"
-            "== : 같음, != : 다름, > : 큼, < : 작음, >= : 크거나 같음, <= : 작거나 같음"
-        )
-        ttk.Label(frm, text=help_text, justify="left").grid(row=2, column=0, columnspan=3, sticky="w", pady=(8,0))
+        ttk.Label(frm, text=tr("operator_help"), justify="left").grid(row=2, column=0, columnspan=3, sticky="w", pady=(8,0))
 
         btns = ttk.Frame(frm)
         btns.grid(row=3, column=0, columnspan=3, sticky="e", pady=(10,0))
-        ok = ttk.Button(btns, text="확인", command=self._ok)
-        cancel = ttk.Button(btns, text="취소", command=self._cancel)
+        ok = ttk.Button(btns, text=tr("ok"), command=self._ok)
+        cancel = ttk.Button(btns, text=tr("cancel"), command=self._cancel)
         ok.grid(row=0, column=0, padx=5)
         cancel.grid(row=0, column=1)
 
@@ -1070,7 +1063,7 @@ class ConditionRowDialog(tk.Toplevel):
         op = self.cmb_op.get().strip()
         val = self.ent_val.get().strip()
         if not var or not op or not val:
-            messagebox.showerror("오류", "변수, 연산자, 값을 모두 입력하세요.")
+            messagebox.showerror(tr("error"), tr("input_values_required"))
             return
         self.condition = (var, op, val)
         self.result_ok = True
@@ -1084,7 +1077,7 @@ class ConditionRowDialog(tk.Toplevel):
 class VariableDialog(tk.Toplevel):
     def __init__(self, master, name: str = "", value: Optional[Union[int, float, bool]] = None):
         super().__init__(master)
-        self.title("변수 추가" if not name else "변수 편집")
+        self.title(tr("add_variable") if not name else tr("edit_variable"))
         self.resizable(False, False)
         self.result_ok = False
         self.var_name: str = name
@@ -1093,13 +1086,13 @@ class VariableDialog(tk.Toplevel):
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
 
-        ttk.Label(frm, text="변수명").grid(row=0, column=0, sticky="w")
+        ttk.Label(frm, text=tr("variable_name")).grid(row=0, column=0, sticky="w")
         self.ent_name = ttk.Entry(frm, width=20)
         self.ent_name.grid(row=1, column=0, sticky="ew", pady=(0,8))
         if name:
             self.ent_name.insert(0, name)
 
-        ttk.Label(frm, text="초기값").grid(row=0, column=1, sticky="w", padx=(8,0))
+        ttk.Label(frm, text=tr("initial_value")).grid(row=0, column=1, sticky="w", padx=(8,0))
         self.ent_val = ttk.Entry(frm, width=10)
         self.ent_val.grid(row=1, column=1, sticky="ew", padx=(8,0))
         if value is not None:
@@ -1107,8 +1100,8 @@ class VariableDialog(tk.Toplevel):
 
         btns = ttk.Frame(frm)
         btns.grid(row=2, column=0, columnspan=2, sticky="e", pady=(10,0))
-        ok = ttk.Button(btns, text="확인", command=self._ok)
-        cancel = ttk.Button(btns, text="취소", command=self._cancel)
+        ok = ttk.Button(btns, text=tr("ok"), command=self._ok)
+        cancel = ttk.Button(btns, text=tr("cancel"), command=self._cancel)
         ok.grid(row=0, column=0, padx=5)
         cancel.grid(row=0, column=1)
 
@@ -1122,7 +1115,7 @@ class VariableDialog(tk.Toplevel):
         name = self.ent_name.get().strip()
         val_text = self.ent_val.get().strip()
         if not name or not val_text:
-            messagebox.showerror("오류", "변수명과 초기값을 입력하세요.")
+            messagebox.showerror(tr("error"), tr("input_var_init_required"))
             return
         if val_text.lower() == "true":
             val: Union[int, float, bool] = True
@@ -1135,7 +1128,7 @@ class VariableDialog(tk.Toplevel):
                 try:
                     val = float(val_text)
                 except ValueError:
-                    messagebox.showerror("오류", "초기값은 숫자 또는 true/false여야 합니다.")
+                    messagebox.showerror(tr("error"), tr("invalid_initial_value"))
                     return
         self.var_name = name
         self.value = val
@@ -1150,7 +1143,7 @@ class VariableDialog(tk.Toplevel):
 class ConditionDialog(tk.Toplevel):
     def __init__(self, master, variables: List[str], initial: str, story: Story):
         super().__init__(master)
-        self.title("조건/행동 편집")
+        self.title(tr("edit_conditions"))
         self.resizable(False, False)
         self.result_ok = False
         self.variables = variables
@@ -1163,9 +1156,9 @@ class ConditionDialog(tk.Toplevel):
         frm.columnconfigure(0, weight=1)
 
         self.tree = ttk.Treeview(frm, columns=("var", "op", "val"), show="headings", height=6)
-        self.tree.heading("var", text="변수")
-        self.tree.heading("op", text="연산자")
-        self.tree.heading("val", text="값")
+        self.tree.heading("var", text=tr("variable"))
+        self.tree.heading("op", text=tr("operator"))
+        self.tree.heading("val", text=tr("value"))
         self.tree.column("var", width=100, anchor="w")
         self.tree.column("op", width=80, anchor="w")
         self.tree.column("val", width=120, anchor="w")
@@ -1173,15 +1166,15 @@ class ConditionDialog(tk.Toplevel):
 
         btns = ttk.Frame(frm)
         btns.grid(row=0, column=1, sticky="ns", padx=(8,0))
-        ttk.Button(btns, text="추가", command=self._add).grid(row=0, column=0, pady=2)
-        ttk.Button(btns, text="편집", command=self._edit).grid(row=1, column=0, pady=2)
-        ttk.Button(btns, text="삭제", command=self._delete).grid(row=2, column=0, pady=2)
-        ttk.Button(btns, text="변수 추가", command=self._add_variable).grid(row=3, column=0, pady=2)
+        ttk.Button(btns, text=tr("add"), command=self._add).grid(row=0, column=0, pady=2)
+        ttk.Button(btns, text=tr("edit"), command=self._edit).grid(row=1, column=0, pady=2)
+        ttk.Button(btns, text=tr("delete"), command=self._delete).grid(row=2, column=0, pady=2)
+        ttk.Button(btns, text=tr("add_variable"), command=self._add_variable).grid(row=3, column=0, pady=2)
 
         bottom = ttk.Frame(frm)
         bottom.grid(row=1, column=0, columnspan=2, sticky="e", pady=(8,0))
-        ok = ttk.Button(bottom, text="확인", command=self._ok)
-        cancel = ttk.Button(bottom, text="취소", command=self._cancel)
+        ok = ttk.Button(bottom, text=tr("ok"), command=self._ok)
+        cancel = ttk.Button(bottom, text=tr("cancel"), command=self._cancel)
         ok.grid(row=0, column=0, padx=5)
         cancel.grid(row=0, column=1)
 
@@ -1268,7 +1261,7 @@ class ChoiceEditor(tk.Toplevel):
         frm.grid(row=0, column=0, sticky="nsew")
         frm.columnconfigure(0, weight=1)
 
-        ttk.Label(frm, text="버튼 문구").grid(row=0, column=0, sticky="w")
+        ttk.Label(frm, text=tr("button_text")).grid(row=0, column=0, sticky="w")
         self.ent_text = tk.Text(frm, width=50, height=1, wrap="none")
         self.ent_text.grid(row=1, column=0, sticky="ew", pady=(0,8))
         self.auto_text = VarAutocomplete(self.ent_text, lambda: self.variables)
@@ -1276,22 +1269,22 @@ class ChoiceEditor(tk.Toplevel):
         highlight_variables(self.ent_text)
         ttk.Button(frm, text="$", width=2, command=self.auto_text.trigger).grid(row=1, column=1, padx=(4,0))
 
-        ttk.Label(frm, text="이동 타깃 분기 ID").grid(row=2, column=0, sticky="w")
+        ttk.Label(frm, text=tr("target_branch_id")).grid(row=2, column=0, sticky="w")
         self.cmb_target = ttk.Combobox(frm, values=branch_ids, state="readonly", width=30)
         self.cmb_target.grid(row=3, column=0, sticky="w")
 
-        ttk.Label(frm, text="조건/행동식").grid(row=4, column=0, sticky="w")
+        ttk.Label(frm, text=tr("condition_action_expr")).grid(row=4, column=0, sticky="w")
         cond_frame = ttk.Frame(frm)
         cond_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0,8))
         cond_frame.columnconfigure(0, weight=1)
         self.ent_cond = ttk.Entry(cond_frame, width=50, state="readonly")
         self.ent_cond.grid(row=0, column=0, sticky="ew")
-        ttk.Button(cond_frame, text="편집...", command=self._open_cond_editor).grid(row=0, column=1, padx=(4,0))
+        ttk.Button(cond_frame, text=tr("edit_ellipsis"), command=self._open_cond_editor).grid(row=0, column=1, padx=(4,0))
 
         btns = ttk.Frame(frm)
         btns.grid(row=6, column=0, sticky="e", pady=(10,0))
-        ok = ttk.Button(btns, text="확인", command=self._ok)
-        cancel = ttk.Button(btns, text="취소", command=self._cancel)
+        ok = ttk.Button(btns, text=tr("ok"), command=self._ok)
+        cancel = ttk.Button(btns, text=tr("cancel"), command=self._cancel)
         ok.grid(row=0, column=0, padx=5)
         cancel.grid(row=0, column=1)
 
@@ -1325,10 +1318,10 @@ class ChoiceEditor(tk.Toplevel):
         cond = re.sub(r"\btrue\b", "1", cond, flags=re.IGNORECASE)
         cond = re.sub(r"\bfalse\b", "0", cond, flags=re.IGNORECASE)
         if not text:
-            messagebox.showerror("오류", "버튼 문구를 입력하세요.")
+            messagebox.showerror(tr("error"), tr("input_button_text"))
             return
         if not target:
-            messagebox.showerror("오류", "이동 타깃 분기 ID를 선택하세요.")
+            messagebox.showerror(tr("error"), tr("select_target_branch"))
             return
         self.choice = Choice(text=text, target_id=target, condition=(cond or None))
         self.result_ok = True
@@ -1393,21 +1386,21 @@ class ChapterEditor(tk.Tk):
     def _build_menu(self):
         m = tk.Menu(self)
         fm = tk.Menu(m, tearoff=0)
-        fm.add_command(label="새로 만들기", command=self._new_story, accelerator="Ctrl+N")
-        fm.add_command(label="열기...", command=self._open_file, accelerator="Ctrl+O")
+        fm.add_command(label=tr("new"), command=self._new_story, accelerator="Ctrl+N")
+        fm.add_command(label=tr("open"), command=self._open_file, accelerator="Ctrl+O")
         fm.add_separator()
-        fm.add_command(label="저장", command=self._save_file, accelerator="Ctrl+S")
-        fm.add_command(label="다른 이름으로 저장...", command=self._save_file_as)
+        fm.add_command(label=tr("save"), command=self._save_file, accelerator="Ctrl+S")
+        fm.add_command(label=tr("save_as"), command=self._save_file_as)
         fm.add_separator()
-        fm.add_command(label="종료", command=self._exit_app)
-        m.add_cascade(label="파일", menu=fm)
+        fm.add_command(label=tr("exit"), command=self._exit_app)
+        m.add_cascade(label=tr("file_menu"), menu=fm)
 
         em = tk.Menu(m, tearoff=0)
-        em.add_command(label="챕터 추가", command=self._add_chapter, accelerator="Ctrl+Shift+A")
-        em.add_command(label="챕터 삭제", command=self._delete_current_chapter, accelerator="Del")
+        em.add_command(label=tr("add_chapter"), command=self._add_chapter, accelerator="Ctrl+Shift+A")
+        em.add_command(label=tr("delete_chapter"), command=self._delete_current_chapter, accelerator="Del")
         em.add_separator()
-        em.add_command(label="찾기/변경", command=self._open_find_window, accelerator="Ctrl+F")
-        m.add_cascade(label="편집", menu=em)
+        em.add_command(label=tr("find_replace"), command=self._open_find_window, accelerator="Ctrl+F")
+        m.add_cascade(label=tr("edit_menu"), menu=em)
 
         self.config(menu=m)
 
@@ -1432,11 +1425,11 @@ class ChapterEditor(tk.Tk):
         left.rowconfigure(3, weight=1)
 
         # 작품 메타
-        meta = ttk.LabelFrame(left, text="작품 정보", padding=8)
+        meta = ttk.LabelFrame(left, text=tr("story_info"), padding=8)
         meta.grid(row=0, column=0, sticky="ew")
         meta.columnconfigure(1, weight=1)
 
-        ttk.Label(meta, text="제목(@title)").grid(row=0, column=0, sticky="w")
+        ttk.Label(meta, text=tr("title_label")).grid(row=0, column=0, sticky="w")
         self.ent_title = tk.Text(meta, width=30, height=1, wrap="none")
         self.ent_title.grid(row=0, column=1, sticky="ew", pady=(0, 6))
         self.ent_title.insert("1.0", self.story.title)
@@ -1448,12 +1441,12 @@ class ChapterEditor(tk.Tk):
         highlight_variables(self.ent_title)
         ttk.Button(meta, text="$", width=2, command=self.auto_title.trigger).grid(row=0, column=2, padx=(4, 0))
 
-        ttk.Label(meta, text="시작 분기(@start)").grid(row=1, column=0, sticky="w")
+        ttk.Label(meta, text=tr("start_branch_label")).grid(row=1, column=0, sticky="w")
         self.cmb_start = ttk.Combobox(meta, values=[], state="readonly")
         self.cmb_start.grid(row=1, column=1, sticky="ew")
         self.cmb_start.bind("<<ComboboxSelected>>", lambda e: self._on_start_changed())
 
-        ttk.Label(meta, text="엔딩 문구(@ending)").grid(row=2, column=0, sticky="w")
+        ttk.Label(meta, text=tr("ending_text_label")).grid(row=2, column=0, sticky="w")
         self.ent_end = ttk.Entry(meta, width=30)
         self.ent_end.grid(row=2, column=1, sticky="ew")
         self.ent_end.insert(0, self.story.ending_text)
@@ -1464,32 +1457,32 @@ class ChapterEditor(tk.Tk):
         self.var_show_disabled = tk.BooleanVar(value=self.story.show_disabled)
         self.chk_show_disabled = ttk.Checkbutton(
             meta,
-            text="비활성 선택지 표시",
+            text=tr("show_disabled_choices"),
             variable=self.var_show_disabled,
             command=self._on_show_disabled_changed,
         )
         self.chk_show_disabled.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
         # 변수 목록
-        var_frame = ttk.LabelFrame(left, text="변수 목록", padding=8)
+        var_frame = ttk.LabelFrame(left, text=tr("variable_list"), padding=8)
         var_frame.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         var_frame.columnconfigure(0, weight=1)
 
         btns = ttk.Frame(var_frame)
         btns.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        ttk.Button(btns, text="추가", command=self._add_variable).pack(side="left")
-        ttk.Button(btns, text="편집", command=self._edit_variable).pack(side="left", padx=(6, 0))
-        ttk.Button(btns, text="삭제", command=self._delete_variable).pack(side="left", padx=(6, 0))
+        ttk.Button(btns, text=tr("add"), command=self._add_variable).pack(side="left")
+        ttk.Button(btns, text=tr("edit"), command=self._edit_variable).pack(side="left", padx=(6, 0))
+        ttk.Button(btns, text=tr("delete"), command=self._delete_variable).pack(side="left", padx=(6, 0))
 
         self.tree_vars = ttk.Treeview(var_frame, columns=("var", "val"), show="headings", height=5)
-        self.tree_vars.heading("var", text="변수")
-        self.tree_vars.heading("val", text="값")
+        self.tree_vars.heading("var", text=tr("variable"))
+        self.tree_vars.heading("val", text=tr("value"))
         self.tree_vars.column("var", width=80, anchor="w")
         self.tree_vars.column("val", width=80, anchor="w")
         self.tree_vars.grid(row=1, column=0, sticky="ew")
 
         # 챕터 목록
-        chap_frame = ttk.LabelFrame(left, text="챕터 목록", padding=8)
+        chap_frame = ttk.LabelFrame(left, text=tr("chapter_list"), padding=8)
         chap_frame.grid(row=2, column=0, sticky="nsew", pady=(8, 0))
         chap_frame.rowconfigure(1, weight=1)
         chap_frame.columnconfigure(0, weight=1)
@@ -1501,13 +1494,13 @@ class ChapterEditor(tk.Tk):
 
         btns = ttk.Frame(chap_frame)
         btns.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        ttk.Button(btns, text="추가", command=self._add_chapter).pack(side="left")
-        ttk.Button(btns, text="삭제", command=self._delete_current_chapter).pack(side="left", padx=(6, 0))
-        ttk.Button(btns, text="위로", command=lambda: self._reorder_chapter(-1)).pack(side="left", padx=(6, 0))
-        ttk.Button(btns, text="아래로", command=lambda: self._reorder_chapter(1)).pack(side="left", padx=(6, 0))
+        ttk.Button(btns, text=tr("add"), command=self._add_chapter).pack(side="left")
+        ttk.Button(btns, text=tr("delete"), command=self._delete_current_chapter).pack(side="left", padx=(6, 0))
+        ttk.Button(btns, text=tr("up"), command=lambda: self._reorder_chapter(-1)).pack(side="left", padx=(6, 0))
+        ttk.Button(btns, text=tr("down"), command=lambda: self._reorder_chapter(1)).pack(side="left", padx=(6, 0))
 
         # 분기 목록
-        branch_frame = ttk.LabelFrame(left, text="분기 목록", padding=8)
+        branch_frame = ttk.LabelFrame(left, text=tr("branch_list"), padding=8)
         branch_frame.grid(row=3, column=0, sticky="nsew", pady=(8, 0))
         branch_frame.rowconfigure(1, weight=1)
         branch_frame.columnconfigure(0, weight=1)
@@ -1519,10 +1512,10 @@ class ChapterEditor(tk.Tk):
 
         bbtns = ttk.Frame(branch_frame)
         bbtns.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        ttk.Button(bbtns, text="추가", command=self._add_branch).pack(side="left")
-        ttk.Button(bbtns, text="삭제", command=self._delete_current_branch).pack(side="left", padx=(6, 0))
-        ttk.Button(bbtns, text="위로", command=lambda: self._reorder_branch(-1)).pack(side="left", padx=(6, 0))
-        ttk.Button(bbtns, text="아래로", command=lambda: self._reorder_branch(1)).pack(side="left", padx=(6, 0))
+        ttk.Button(bbtns, text=tr("add"), command=self._add_branch).pack(side="left")
+        ttk.Button(bbtns, text=tr("delete"), command=self._delete_current_branch).pack(side="left", padx=(6, 0))
+        ttk.Button(bbtns, text=tr("up"), command=lambda: self._reorder_branch(-1)).pack(side="left", padx=(6, 0))
+        ttk.Button(bbtns, text=tr("down"), command=lambda: self._reorder_branch(1)).pack(side="left", padx=(6, 0))
 
         # 우측 편집/미리보기 영역
         right = ttk.Notebook(root)
@@ -1531,18 +1524,18 @@ class ChapterEditor(tk.Tk):
 
         # 챕터 편집 탭
         edit_tab = ttk.Frame(right, padding=8)
-        right.add(edit_tab, text="분기 편집")
+        right.add(edit_tab, text=tr("edit_branch_tab"))
 
         edit_tab.columnconfigure(1, weight=1)
         edit_tab.rowconfigure(4, weight=1)
 
-        ttk.Label(edit_tab, text="챕터 ID").grid(row=0, column=0, sticky="w")
+        ttk.Label(edit_tab, text=tr("chapter_id")).grid(row=0, column=0, sticky="w")
         self.ent_ch_id = ttk.Entry(edit_tab)
         self.ent_ch_id.grid(row=0, column=1, sticky="ew", pady=(0, 6))
         self.ent_ch_id.bind("<FocusOut>", lambda e: self._apply_chapter_id_title())
         self.ent_ch_id.bind("<Return>", lambda e: self._apply_chapter_id_title())
 
-        ttk.Label(edit_tab, text="챕터 제목").grid(row=1, column=0, sticky="w")
+        ttk.Label(edit_tab, text=tr("chapter_title")).grid(row=1, column=0, sticky="w")
         self.ent_ch_title = tk.Text(edit_tab, height=1, wrap="none")
         self.ent_ch_title.grid(row=1, column=1, sticky="ew", pady=(0, 6))
         self.ent_ch_title.bind("<FocusOut>", lambda e: self._apply_chapter_id_title())
@@ -1552,13 +1545,13 @@ class ChapterEditor(tk.Tk):
         highlight_variables(self.ent_ch_title)
         ttk.Button(edit_tab, text="$", width=2, command=self.auto_ch_title.trigger).grid(row=1, column=2, padx=(4, 0))
 
-        ttk.Label(edit_tab, text="분기 ID").grid(row=2, column=0, sticky="w")
+        ttk.Label(edit_tab, text=tr("branch_id")).grid(row=2, column=0, sticky="w")
         self.ent_br_id = ttk.Entry(edit_tab)
         self.ent_br_id.grid(row=2, column=1, sticky="ew", pady=(0, 6))
         self.ent_br_id.bind("<FocusOut>", lambda e: self._apply_branch_id_title())
         self.ent_br_id.bind("<Return>", lambda e: self._apply_branch_id_title())
 
-        ttk.Label(edit_tab, text="분기 제목").grid(row=3, column=0, sticky="w")
+        ttk.Label(edit_tab, text=tr("branch_title")).grid(row=3, column=0, sticky="w")
         self.ent_br_title = tk.Text(edit_tab, height=1, wrap="none")
         self.ent_br_title.grid(row=3, column=1, sticky="ew", pady=(0, 6))
         self.ent_br_title.bind("<FocusOut>", lambda e: self._apply_branch_id_title())
@@ -1569,7 +1562,7 @@ class ChapterEditor(tk.Tk):
         ttk.Button(edit_tab, text="$", width=2, command=self.auto_br_title.trigger).grid(row=3, column=2, padx=(4, 0))
 
         # 본문
-        body_frame = ttk.LabelFrame(edit_tab, text="본문(빈 줄로 문단 구분)", padding=6)
+        body_frame = ttk.LabelFrame(edit_tab, text=tr("body_label"), padding=6)
         body_frame.grid(row=4, column=0, columnspan=3, sticky="nsew")
         body_frame.rowconfigure(0, weight=1)
         body_frame.columnconfigure(0, weight=1)
@@ -1588,28 +1581,28 @@ class ChapterEditor(tk.Tk):
         self.txt_body.bind("<<Modified>>", self._on_body_modified)
 
         # 선택지 편집
-        choices_frame = ttk.LabelFrame(edit_tab, text="선택지(버튼)", padding=6)
+        choices_frame = ttk.LabelFrame(edit_tab, text=tr("choices_section"), padding=6)
         choices_frame.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(8, 0))
         choices_frame.columnconfigure(0, weight=1)
 
         self.tree_choices = ttk.Treeview(choices_frame, columns=("text", "target"), show="headings", height=6)
-        self.tree_choices.heading("text", text="버튼 문구")
-        self.tree_choices.heading("target", text="타깃 분기 ID")
+        self.tree_choices.heading("text", text=tr("button_text"))
+        self.tree_choices.heading("target", text=tr("target_branch_id"))
         self.tree_choices.column("text", width=400, anchor="w")
         self.tree_choices.column("target", width=160, anchor="w")
         self.tree_choices.grid(row=0, column=0, sticky="ew")
 
         ch_btns = ttk.Frame(choices_frame)
         ch_btns.grid(row=0, column=1, sticky="ns")
-        ttk.Button(ch_btns, text="추가", command=self._add_choice).grid(row=0, column=0, pady=(0, 4))
-        ttk.Button(ch_btns, text="편집", command=self._edit_choice).grid(row=1, column=0, pady=4)
-        ttk.Button(ch_btns, text="삭제", command=self._delete_choice).grid(row=2, column=0, pady=4)
-        ttk.Button(ch_btns, text="위로", command=lambda: self._reorder_choice(-1)).grid(row=3, column=0, pady=4)
-        ttk.Button(ch_btns, text="아래로", command=lambda: self._reorder_choice(1)).grid(row=4, column=0, pady=4)
+        ttk.Button(ch_btns, text=tr("add"), command=self._add_choice).grid(row=0, column=0, pady=(0, 4))
+        ttk.Button(ch_btns, text=tr("edit"), command=self._edit_choice).grid(row=1, column=0, pady=4)
+        ttk.Button(ch_btns, text=tr("delete"), command=self._delete_choice).grid(row=2, column=0, pady=4)
+        ttk.Button(ch_btns, text=tr("up"), command=lambda: self._reorder_choice(-1)).grid(row=3, column=0, pady=4)
+        ttk.Button(ch_btns, text=tr("down"), command=lambda: self._reorder_choice(1)).grid(row=4, column=0, pady=4)
 
         # 미리보기 탭
         preview_tab = ttk.Frame(right, padding=8)
-        right.add(preview_tab, text="생성 미리보기(.bnov)")
+        right.add(preview_tab, text=tr("preview_tab"))
         preview_tab.rowconfigure(0, weight=1)
         preview_tab.columnconfigure(0, weight=1)
 
@@ -1638,15 +1631,15 @@ class ChapterEditor(tk.Tk):
         # 왼쪽: 분석/검사
         left_btns = ttk.Frame(bottom)
         left_btns.pack(side="left")
-        ttk.Button(left_btns, text="유효성 검사", command=self._validate_story).pack(side="left")
-        ttk.Button(left_btns, text="무한 루프 분석", command=self._analyze_infinite_loops).pack(side="left", padx=(6, 0))
+        ttk.Button(left_btns, text=tr("validate_story"), command=self._validate_story).pack(side="left")
+        ttk.Button(left_btns, text=tr("analyze_loops"), command=self._analyze_infinite_loops).pack(side="left", padx=(6, 0))
         # 오른쪽: 저장/미리보기
         right_btns = ttk.Frame(bottom)
         right_btns.pack(side="right")
-        ttk.Button(right_btns, text="저장", command=self._save_file).pack(side="right")
-        ttk.Button(right_btns, text="미리보기 반영", command=self._apply_preview_to_model).pack(side="right", padx=(0, 6))
-        ttk.Button(right_btns, text="미리보기 갱신", command=self._update_preview).pack(side="right", padx=(0, 6))
-        ttk.Button(right_btns, text="미리보기 실행", command=self._run_preview).pack(side="right", padx=(0, 6))
+        ttk.Button(right_btns, text=tr("save"), command=self._save_file).pack(side="right")
+        ttk.Button(right_btns, text=tr("apply_preview_btn"), command=self._apply_preview_to_model).pack(side="right", padx=(0, 6))
+        ttk.Button(right_btns, text=tr("refresh_preview_btn"), command=self._update_preview).pack(side="right", padx=(0, 6))
+        ttk.Button(right_btns, text=tr("run_preview_btn"), command=self._run_preview).pack(side="right", padx=(0, 6))
 
         root.pack(fill="both", expand=True)
 
@@ -1719,8 +1712,8 @@ class ChapterEditor(tk.Tk):
             return True
 
         res = messagebox.askyesnocancel(
-            "미리보기 반영",
-            "미리보기에서 수정된 내용이 반영되지 않았습니다. 반영하시겠습니까?",
+            tr("preview_apply"),
+            tr("preview_apply_prompt"),
             parent=self,
         )
         if res is None:
@@ -1790,13 +1783,13 @@ class ChapterEditor(tk.Tk):
         new_id = self.ent_ch_id.get().strip()
         new_title = self.ent_ch_title.get("1.0", "end-1c").strip()
         if not new_id:
-            messagebox.showerror("오류", "챕터 ID는 비울 수 없습니다.")
+            messagebox.showerror(tr("error"), tr("chapter_id_required"))
             self.ent_ch_id.focus_set()
             return
         cur_id = self.current_chapter_id
         if new_id != cur_id:
             if new_id in self.story.chapters:
-                messagebox.showerror("오류", f"이미 존재하는 챕터 ID입니다: {new_id}")
+                messagebox.showerror(tr("error"), tr("chapter_id_exists", id=new_id))
                 self.ent_ch_id.delete(0, tk.END)
                 self.ent_ch_id.insert(0, cur_id)
                 return
@@ -1817,13 +1810,13 @@ class ChapterEditor(tk.Tk):
         new_id = self.ent_br_id.get().strip()
         new_title = self.ent_br_title.get("1.0", "end-1c").strip()
         if not new_id:
-            messagebox.showerror("오류", "분기 ID는 비울 수 없습니다.")
+            messagebox.showerror(tr("error"), tr("branch_id_required"))
             self.ent_br_id.focus_set()
             return
         cur_id = self.current_branch_id
         if new_id != cur_id:
             if new_id in self.story.branches:
-                messagebox.showerror("오류", f"이미 존재하는 분기 ID입니다: {new_id}")
+                messagebox.showerror(tr("error"), tr("branch_id_exists", id=new_id))
                 self.ent_br_id.delete(0, tk.END)
                 self.ent_br_id.insert(0, cur_id)
                 return
@@ -1904,11 +1897,11 @@ class ChapterEditor(tk.Tk):
         if self.current_chapter_id is None:
             return
         if len(self.story.chapters) <= 1:
-            messagebox.showwarning("경고", "최소 한 개의 챕터는 필요합니다.")
+            messagebox.showwarning(tr("warning"), tr("at_least_one_chapter"))
             return
         cid = self.current_chapter_id
         ch = self.story.chapters[cid]
-        if messagebox.askyesno("삭제 확인", f"챕터 '{cid}'를 삭제하시겠습니까?"):
+        if messagebox.askyesno(tr("confirm_delete"), tr("delete_chapter_prompt", id=cid)):
             for bid in list(ch.branches.keys()):
                 self.story.branches.pop(bid, None)
                 if self.story.start_id == bid:
@@ -1964,10 +1957,10 @@ class ChapterEditor(tk.Tk):
             return
         ch = self.story.chapters[self.current_chapter_id]
         if len(ch.branches) <= 1:
-            messagebox.showwarning("경고", "챕터에는 최소 한 개의 분기가 필요합니다.")
+            messagebox.showwarning(tr("warning"), tr("at_least_one_branch"))
             return
         bid = self.current_branch_id
-        if messagebox.askyesno("삭제 확인", f"분기 '{bid}'를 삭제하시겠습니까?"):
+        if messagebox.askyesno(tr("confirm_delete"), tr("delete_branch_prompt", id=bid)):
             ch.branches.pop(bid, None)
             self.story.branches.pop(bid, None)
             if self.story.start_id == bid:
@@ -2013,7 +2006,7 @@ class ChapterEditor(tk.Tk):
         dlg = VariableDialog(self)
         if dlg.result_ok:
             if dlg.var_name in self.story.variables:
-                messagebox.showerror("오류", "이미 존재하는 변수명입니다.")
+                messagebox.showerror(tr("error"), tr("variable_name_exists"))
                 return
             self.story.variables[dlg.var_name] = dlg.value
             self._refresh_variable_list()
@@ -2029,7 +2022,7 @@ class ChapterEditor(tk.Tk):
         dlg = VariableDialog(self, name, cur_val)
         if dlg.result_ok:
             if dlg.var_name != name and dlg.var_name in self.story.variables:
-                messagebox.showerror("오류", "이미 존재하는 변수명입니다.")
+                messagebox.showerror(tr("error"), tr("variable_name_exists"))
                 return
             if dlg.var_name != name:
                 self.story.variables.pop(name, None)
@@ -2043,7 +2036,7 @@ class ChapterEditor(tk.Tk):
         if not sel:
             return
         name = self.tree_vars.item(sel[0], "values")[0]
-        if messagebox.askyesno("삭제 확인", f"변수 '{name}'를 삭제하시겠습니까?"):
+        if messagebox.askyesno(tr("confirm_delete"), tr("delete_variable_prompt", name=name)):
             self.story.variables.pop(name, None)
             self._refresh_variable_list()
             self._set_dirty(True)
@@ -2054,7 +2047,7 @@ class ChapterEditor(tk.Tk):
             return
         ids = list(self.story.branches.keys())
         vars = self._collect_variables()
-        dlg = ChoiceEditor(self, "선택지 추가", None, ids, vars)
+        dlg = ChoiceEditor(self, tr("add_choice"), None, ids, vars)
         if dlg.result_ok and dlg.choice:
             br = self.story.branches[self.current_branch_id]
             br.choices.append(dlg.choice)
@@ -2071,7 +2064,7 @@ class ChapterEditor(tk.Tk):
         cur = br.choices[idx]
         ids = list(self.story.branches.keys())
         vars = self._collect_variables()
-        dlg = ChoiceEditor(self, "선택지 편집", cur, ids, vars)
+        dlg = ChoiceEditor(self, tr("edit_choice"), cur, ids, vars)
         if dlg.result_ok and dlg.choice:
             br.choices[idx] = dlg.choice
             self.tree_choices.item(sel[0], values=(dlg.choice.text, dlg.choice.target_id))
@@ -2115,32 +2108,32 @@ class ChapterEditor(tk.Tk):
             self.ent_find.focus_set()
             return
         win = tk.Toplevel(self)
-        win.title("찾기/변경")
+        win.title(tr("find_replace"))
         win.resizable(False, False)
         win.protocol("WM_DELETE_WINDOW", self._close_find_window)
         self.find_win = win
 
         win.columnconfigure(1, weight=1)
 
-        scope_frame = ttk.LabelFrame(win, text="찾기 범위", padding=6)
+        scope_frame = ttk.LabelFrame(win, text=tr("search_scope"), padding=6)
         scope_frame.grid(row=0, column=0, columnspan=2, sticky="w")
         self.find_scope = tk.StringVar(value="branch")
-        ttk.Radiobutton(scope_frame, text="이 분기", variable=self.find_scope, value="branch").pack(side="left")
-        ttk.Radiobutton(scope_frame, text="프로젝트 전체", variable=self.find_scope, value="project").pack(side="left", padx=10)
+        ttk.Radiobutton(scope_frame, text=tr("this_branch"), variable=self.find_scope, value="branch").pack(side="left")
+        ttk.Radiobutton(scope_frame, text=tr("entire_project"), variable=self.find_scope, value="project").pack(side="left", padx=10)
 
-        ttk.Label(win, text="찾을 문자열").grid(row=1, column=0, sticky="w", pady=(10,0))
+        ttk.Label(win, text=tr("find_string")).grid(row=1, column=0, sticky="w", pady=(10,0))
         self.ent_find = ttk.Entry(win)
         self.ent_find.grid(row=1, column=1, sticky="ew", pady=(10,0))
 
-        ttk.Label(win, text="바꿀 문자열").grid(row=2, column=0, sticky="w", pady=(6,0))
+        ttk.Label(win, text=tr("replace_string")).grid(row=2, column=0, sticky="w", pady=(6,0))
         self.ent_replace = ttk.Entry(win)
         self.ent_replace.grid(row=2, column=1, sticky="ew", pady=(6,0))
 
         nav = ttk.Frame(win)
         nav.grid(row=3, column=0, columnspan=2, pady=10)
-        ttk.Button(nav, text="이전", command=lambda: self._find_step(-1)).pack(side="left")
-        ttk.Button(nav, text="다음", command=lambda: self._find_step(1)).pack(side="left", padx=5)
-        ttk.Button(nav, text="바꾸기", command=self._replace_current).pack(side="left", padx=5)
+        ttk.Button(nav, text=tr("previous"), command=lambda: self._find_step(-1)).pack(side="left")
+        ttk.Button(nav, text=tr("next"), command=lambda: self._find_step(1)).pack(side="left", padx=5)
+        ttk.Button(nav, text=tr("replace"), command=self._replace_current).pack(side="left", padx=5)
 
         self.ent_find.focus_set()
 
@@ -2186,7 +2179,7 @@ class ChapterEditor(tk.Tk):
                 not self.find_results):
             self._build_find_results(query, scope)
         if not self.find_results:
-            messagebox.showinfo("찾기", "결과가 없습니다.")
+            messagebox.showinfo(tr("find_title"), tr("find_no_results"))
             return
         self.find_index = (self.find_index + delta) % len(self.find_results)
         bid, pos = self.find_results[self.find_index]
@@ -2257,7 +2250,7 @@ class ChapterEditor(tk.Tk):
         try:
             story = parser.parse(txt)
         except ParseError as e:
-            messagebox.showerror("파싱 오류", str(e))
+            messagebox.showerror(tr("parse_error"), str(e))
             return False
         self.story = story
         self.current_branch_id = story.start_id
@@ -2306,38 +2299,38 @@ class ChapterEditor(tk.Tk):
         warnings = []
 
         if not self.story.title.strip():
-            errors.append("작품 제목이 비어 있습니다.")
+            errors.append(tr("story_title_empty"))
         if not self.story.start_id or self.story.start_id not in self.story.branches:
-            errors.append("시작 분기(@start)가 유효하지 않습니다.")
+            errors.append(tr("invalid_start"))
 
         ids = set(self.story.branches.keys())
         for bid, br in self.story.branches.items():
             if not br.branch_id.strip():
-                errors.append(f"분기 ID가 비어 있습니다: 내부키={bid}")
+                errors.append(tr("branch_id_empty", id=bid))
             if br.branch_id != bid:
-                errors.append(f"내부키와 분기 ID가 불일치합니다: {bid} != {br.branch_id}")
+                errors.append(tr("branch_id_mismatch", id=bid, branch_id=br.branch_id))
             for c in br.choices:
                 if c.target_id not in ids:
-                    warnings.append(f"[{bid}] 선택지 타깃 미존재: '{c.text}' -> {c.target_id}")
+                    warnings.append(tr("warn_choice_target_missing", id=bid, text=c.text, target=c.target_id))
 
         for cid, ch in self.story.chapters.items():
             if not ch.branches:
-                warnings.append(f"챕터 '{cid}'에 분기가 없습니다.")
+                warnings.append(tr("warn_chapter_no_branches", id=cid))
 
         msg = []
         if errors:
-            msg.append("오류:")
+            msg.append(tr("errors_label"))
             msg.extend(f"- {e}" for e in errors)
         if warnings:
             if msg:
                 msg.append("")
-            msg.append("경고:")
+            msg.append(tr("warnings_label"))
             msg.extend(f"- {w}" for w in warnings)
 
         if not msg:
-            messagebox.showinfo("유효성 검사", "문제 없음.")
+            messagebox.showinfo(tr("validation_title"), tr("validation_ok"))
         else:
-            messagebox.showwarning("유효성 검사 결과", "\n".join(msg))
+            messagebox.showwarning(tr("validation_result_title"), "\n".join(msg))
 
     # ---------- 파일 입출력 ----------
     def _new_story(self):
@@ -2367,7 +2360,7 @@ class ChapterEditor(tk.Tk):
     def _open_file(self):
         if not self._confirm_discard_changes():
             return
-        path = filedialog.askopenfilename(title="열기", filetypes=[("Branching Novel Files","*.bnov"),("All Files","*.*")])
+        path = filedialog.askopenfilename(title=tr("open_title"), filetypes=[("Branching Novel Files","*.bnov"),("All Files","*.*")])
         if not path:
             return
         try:
@@ -2376,10 +2369,10 @@ class ChapterEditor(tk.Tk):
             parser = StoryParser()
             story = parser.parse(text)
         except ParseError as e:
-            messagebox.showerror("파싱 오류", str(e))
+            messagebox.showerror(tr("parse_error"), str(e))
             return
         except Exception as e:
-            messagebox.showerror("오류", f"파일을 열 수 없습니다:\n{e}")
+            messagebox.showerror(tr("error"), tr("open_file_error", err=e))
             return
 
         self.story = story
@@ -2413,17 +2406,17 @@ class ChapterEditor(tk.Tk):
             with open(self.current_file, "w", encoding="utf-8") as f:
                 f.write(txt + "\n")
         except Exception as e:
-            messagebox.showerror("오류", f"저장 실패:\n{e}")
+            messagebox.showerror(tr("error"), tr("save_error", err=e))
             return
         self._set_dirty(False)
-        messagebox.showinfo("저장", "저장 완료.")
+        messagebox.showinfo(tr("save_title"), tr("save_done"))
 
     def _save_file_as(self):
         if not self._apply_preview_to_model():
             return
         self._apply_body_to_model()
         path = filedialog.asksaveasfilename(
-            title="다른 이름으로 저장",
+            title=tr("save_as_title"),
             defaultextension=".bnov",
             filetypes=[("Branching Novel Files","*.bnov"),("All Files","*.*")],
             initialfile="story.bnov"
@@ -2435,12 +2428,12 @@ class ChapterEditor(tk.Tk):
             with open(path, "w", encoding="utf-8") as f:
                 f.write(txt + "\n")
         except Exception as e:
-            messagebox.showerror("오류", f"저장 실패:\n{e}")
+            messagebox.showerror(tr("error"), tr("save_error", err=e))
             return
         self.current_file = path
         self._set_dirty(False)
         self.title(f"Branching Novel Editor - {os.path.basename(path)}")
-        messagebox.showinfo("저장", "저장 완료.")
+        messagebox.showinfo(tr("save_title"), tr("save_done"))
 
     def _exit_app(self):
         # 1) 미리보기에서 수정한 내용이 있으면 먼저 처리(반영 or 폐기)
@@ -2449,7 +2442,7 @@ class ChapterEditor(tk.Tk):
 
         # 2) 더티 플래그가 있으면 저장 여부 확인
         if self.dirty:
-            res = messagebox.askyesnocancel("변경 내용", "저장하지 않은 변경사항이 있습니다. 저장하시겠습니까?")
+            res = messagebox.askyesnocancel(tr("unsaved_changes_title"), tr("unsaved_changes_prompt"))
             if res is None:
                 # 취소
                 return
@@ -2473,7 +2466,7 @@ class ChapterEditor(tk.Tk):
     def _confirm_discard_changes(self) -> bool:
         if not self.dirty:
             return True
-        res = messagebox.askyesnocancel("변경 내용", "저장하지 않은 변경사항이 있습니다. 저장하시겠습니까?")
+        res = messagebox.askyesnocancel(tr("unsaved_changes_title"), tr("unsaved_changes_prompt"))
         if res is None:
             return False
         if res is True:
@@ -2509,7 +2502,7 @@ class ChapterEditor(tk.Tk):
         start_id = story.start_id
 
         if not start_id or start_id not in branches:
-            messagebox.showerror("오류", "시작 분기(@start)가 유효하지 않습니다.")
+            messagebox.showerror(tr("error"), tr("invalid_start"))
             return
 
         # -----------------------
@@ -2961,73 +2954,73 @@ class ChapterEditor(tk.Tk):
                 for ch, atoms in edges[bid]:
                     if ch.target_id in comp: continue
                     if atoms is None:
-                        verdict = "불확실(복잡식)"
-                        cond_s = "(복잡식)"
+                        verdict = tr("uncertain_complex")
+                        cond_s = tr("complex_expr")
                     else:
                         every = eval_atoms_over_interval(atoms, pst)
-                        cond_s = " and ".join(f"{v} {op} {val}" for (v, op, val) in atoms) if atoms else "(조건 없음)"
+                        cond_s = " and ".join(f"{v} {op} {val}" for (v, op, val) in atoms) if atoms else tr("cond_none")
                         if every is True:
-                            verdict = "항상 열림"
+                            verdict = tr("always_open")
                         else:
                             sat = refine_with_atoms(atoms, pst) is not None
-                            verdict = "가능" if sat else "불가능"
+                            verdict = tr("possible") if sat else tr("impossible")
                     items.append(f"{bid} → {ch.target_id} | {cond_s} | {verdict}")
-            if not items: return "외부 탈출 경로 없음"
+            if not items: return tr("no_exit_path")
             if len(items) > max_list:
-                return "\n".join(items[:max_list] + [f"... (+{len(items) - max_list}개 더 있음)"])
+                return "\n".join(items[:max_list] + [tr("more_items", n=len(items) - max_list)])
             return "\n".join(items)
 
         lines = []
-        lines.append("무한 루프 진단 요약")
+        lines.append(tr("loop_summary_heading"))
         lines.append("")
-        lines.append(f"- 확정: {len(definite)}개, 증거로 확인: {len(witnessed)}개, 검토 필요(가능): {len(possible)}개")
+        lines.append(tr("loop_summary_counts", definite=len(definite), witnessed=len(witnessed), possible=len(possible)))
         lines.append("")
 
         if definite:
-            lines.append("[확정 무한 루프]  반드시 수정 필요")
+            lines.append(tr("loop_definite_header"))
             for i, comp in enumerate(definite, 1):
-                lines.append(f"{i}. 루프 노드 {len(comp)}개")
-                lines.append(f"   요약 경로: {nodes_summary(comp)}")
-                lines.append("   탈출 가능성: 외부 탈출 경로 없음(모든 노드가 내부로 항상 이동)")
-                lines.append("   조치: 외부로 나가는 선택지 추가, 또는 내부 선택지에 탈출 조건(예: 변수 감소+임계 가드) 부여")
+                lines.append(tr("loop_nodes_line", i=i, count=len(comp)))
+                lines.append(tr("loop_path_summary_line", path=nodes_summary(comp)))
+                lines.append(tr("loop_no_exit"))
+                lines.append(tr("loop_definite_action"))
                 lines.append("")
         if witnessed:
-            lines.append("[증거 경로로 확인된 무한 루프]  실제 실행으로 반복됨")
+            lines.append(tr("loop_witnessed_header"))
             for i, (comp, path) in enumerate(witnessed, 1):
-                lines.append(f"{i}. 루프 노드 {len(comp)}개")
-                lines.append(f"   요약 경로: {nodes_summary(comp)}")
-                lines.append("   예시 실행 경로(일부):")
+                lines.append(tr("loop_nodes_line", i=i, count=len(comp)))
+                lines.append(tr("loop_path_summary_line", path=nodes_summary(comp)))
+                lines.append(tr("loop_example_path"))
                 for step in path[:12]:
                     src_bid, text, tgt_bid = step
                     lines.append(f"     {src_bid} --[{text}]--> {tgt_bid}")
                 if len(path) > 12:
-                    lines.append(f"     ... (+{len(path) - 12} 단계)")
+                    lines.append(tr("loop_more_steps", count=len(path) - 12))
                 ex = exit_edges_summary(comp, max_list=2)
-                lines.append("   외부 탈출 후보:")
+                lines.append(tr("loop_exit_candidates"))
                 for ln in ex.split("\n"):
                     lines.append("     " + ln)
-                lines.append("   조치: 위 탈출 후보의 조건을 충족시킬 기회가 실제로 오는지 확인. 필요 시 조건/액션 설계 조정")
+                lines.append(tr("loop_witnessed_action"))
                 lines.append("")
         if possible:
-            lines.append("[검토 필요(가능 무한 루프)]  구조상 순환, 탈출 경로는 있을 수 있음")
+            lines.append(tr("loop_possible_header"))
             for i, comp in enumerate(possible, 1):
-                lines.append(f"{i}. 루프 노드 {len(comp)}개")
-                lines.append(f"   요약 경로: {nodes_summary(comp)}")
+                lines.append(tr("loop_nodes_line", i=i, count=len(comp)))
+                lines.append(tr("loop_path_summary_line", path=nodes_summary(comp)))
                 ex = exit_edges_summary(comp, max_list=3)
-                lines.append("   외부 탈출 요약:")
+                lines.append(tr("loop_exit_summary"))
                 for ln in ex.split("\n"):
                     lines.append("     " + ln)
-                lines.append("   조치: '항상 열림' 또는 '불확실' 엣지가 있다면 조건을 구체화. '가능'만 존재한다면 그 조건을 만족할 상태가 실제로 도달 가능한지 점검")
+                lines.append(tr("loop_possible_action"))
                 lines.append("")
 
-        lines.append("정의:")
-        lines.append("- 확정: 각 노드에서 내부 이동이 항상 가능하고, 외부 탈출은 어떤 상태에서도 불가능")
-        lines.append("- 증거: 실제 값으로 내부만 따라가 반복 도달 확인")
-        lines.append("- 가능: 순환은 있으나 외부 탈출이 조건에 따라 열릴 수 있음")
+        lines.append(tr("definitions_heading"))
+        lines.append(tr("definition_definite"))
+        lines.append(tr("definition_witnessed"))
+        lines.append(tr("definition_possible"))
 
         # 팝업 표시
         win = tk.Toplevel(self)
-        win.title("무한 루프 분석")
+        win.title(tr("loop_analysis_title"))
         win.geometry("900x560")
         frm = ttk.Frame(win, padding=8)
         frm.pack(fill="both", expand=True)
@@ -3040,7 +3033,7 @@ class ChapterEditor(tk.Tk):
         txt.insert(tk.END, "\n".join(lines))
         txt.configure(state="disabled")
 
-        ttk.Button(win, text="닫기", command=win.destroy).pack(pady=6)
+        ttk.Button(win, text=tr("close"), command=win.destroy).pack(pady=6)
 
 
 # ---------- 진입점 ----------
