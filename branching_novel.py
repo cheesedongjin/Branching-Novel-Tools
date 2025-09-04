@@ -218,6 +218,8 @@ class BranchingNovelApp(tk.Tk):
         if self._marquee_job:
             self.after_cancel(self._marquee_job)
             self._marquee_job = None
+        # make sure geometry info is up-to-date before measuring width
+        self.chapter_list.update_idletasks()
         width = self.chapter_list.winfo_width()
         if width <= 1:
             # widget not yet rendered; try again shortly
