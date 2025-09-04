@@ -182,7 +182,9 @@ class VariableDialog(tk.Toplevel):
         frm.grid(row=0, column=0, sticky="nsew")
 
         ttk.Label(frm, text=tr("variable_name")).grid(row=0, column=0, sticky="w")
-        self.ent_name = ttk.Entry(frm, width=20)
+        self.ent_name = ttk.Entry(frm, width=20, validate="key")
+        vcmd = (self.register(self._validate_name), "%P")
+        self.ent_name.configure(validatecommand=vcmd)
         self.ent_name.grid(row=1, column=0, sticky="ew", pady=(0,8))
         if name:
             self.ent_name.insert(0, name)
@@ -217,7 +219,7 @@ class VariableDialog(tk.Toplevel):
         if not name or not val_text:
             messagebox.showerror(tr("error"), tr("input_var_init_required"))
             return
-        if "__" in name or name.startswith("_") or name.endswith("_"):
+        if not re.fullmatch(r"[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*", name):
             messagebox.showerror(tr("error"), tr("invalid_variable_name"))
             return
         if val_text.lower() == "true":
@@ -249,6 +251,9 @@ class VariableDialog(tk.Toplevel):
     def _cancel(self):
         self.result_ok = False
         self.destroy()
+
+    def _validate_name(self, proposed: str) -> bool:
+        return bool(re.fullmatch(r"[A-Za-z0-9_]*", proposed))
 
 
 class ConditionDialog(tk.Toplevel):
@@ -794,14 +799,14 @@ class ChapterEditor(tk.Tk):
             y = event.y_root - widget.winfo_rooty()
             if isinstance(widget, tk.Text):
                 idx = widget.index(f"@{x},{y}")
-                widget.insert(idx, self._drag_var_name)
+                widget.insert(idx, f"__{self._drag_var_name}__")
                 highlight_variables(widget, lambda: self._collect_variables())
             else:
                 try:
                     idx = widget.index(f"@{x}")
                 except tk.TclError:
                     idx = widget.index(tk.INSERT)
-                widget.insert(idx, self._drag_var_name)
+                widget.insert(idx, f"__{self._drag_var_name}__")
             widget.focus_force()
         self._drag_var_name = None
         if self._drag_label:

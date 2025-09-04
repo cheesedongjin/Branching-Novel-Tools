@@ -58,7 +58,10 @@ _STRINGS = {
         'at_least_one_branch': 'Each chapter must have at least one branch.',
         'delete_branch_prompt': "Delete branch '{id}'?",
         'variable_name_exists': 'Variable name already exists.',
-        'invalid_variable_name': 'Variable name cannot contain "__" or begin or end with "_".',
+        'invalid_variable_name': (
+            'Variable name may only contain letters, digits, or underscores and '
+            'cannot contain "__" or begin or end with "_".'
+        ),
         'delete_variable_prompt': "Delete variable '{name}'?",
         'find_title': 'Find',
         'find_no_results': 'No results found.',
@@ -204,7 +207,10 @@ _STRINGS = {
         'at_least_one_branch': '챕터에는 최소 한 개의 분기가 필요합니다.',
         'delete_branch_prompt': "분기 '{id}'를 삭제하시겠습니까?",
         'variable_name_exists': '이미 존재하는 변수명입니다.',
-        'invalid_variable_name': '변수명에는 "__"가 포함되거나 "_"로 시작하거나 끝날 수 없습니다.',
+        'invalid_variable_name': (
+            '변수명은 영문자, 숫자, 밑줄만 사용할 수 있으며 "__"를 포함하거나 '
+            '"_"로 시작하거나 끝날 수 없습니다.'
+        ),
         'delete_variable_prompt': "변수 '{name}'를 삭제하시겠습니까?",
         'find_title': '찾기',
         'find_no_results': '결과가 없습니다.',
