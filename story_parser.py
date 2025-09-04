@@ -301,16 +301,19 @@ class StoryParser:
             if "=" not in rest:
                 raise ParseError("Invalid set syntax.")
             var, val = rest.split("=", 1)
-            return Action(op="set", var=var.strip(), value=self._parse_value(val.strip()))
+            var = self._ensure_valid_var(var)
+            return Action(op="set", var=var, value=self._parse_value(val.strip()))
         if content.startswith("add "):
             rest = content[4:].strip()
             if "+=" not in rest:
                 raise ParseError("Invalid add syntax.")
             var, val = rest.split("+=", 1)
-            return Action(op="add", var=var.strip(), value=self._parse_value(val.strip()))
+            var = self._ensure_valid_var(var)
+            return Action(op="add", var=var, value=self._parse_value(val.strip()))
         m = re.match(r"(\w+)\s*(=|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)", content)
         if m:
             var, op, val = m.groups()
+            var = self._ensure_valid_var(var)
             op_map = {
                 "=": "set",
                 "+=": "add",
@@ -324,11 +327,17 @@ class StoryParser:
             if op == "=":
                 try:
                     parsed = self._parse_value(val.strip())
-                    return Action(op="set", var=var.strip(), value=parsed)
+                    return Action(op="set", var=var, value=parsed)
                 except ParseError:
-                    return Action(op="expr", var=var.strip(), value=val.strip())
-            return Action(op=op_map[op], var=var.strip(), value=self._parse_value(val.strip()))
+                    return Action(op="expr", var=var, value=val.strip())
+            return Action(op=op_map[op], var=var, value=self._parse_value(val.strip()))
         raise ParseError("Unknown action command.")
+
+    def _ensure_valid_var(self, name: str) -> str:
+        name = name.strip()
+        if not name or re.fullmatch(r"_+", name):
+            raise ParseError("Invalid variable name.")
+        return name
 
     def _parse_value(self, token: str) -> Union[int, float, bool, str]:
         t = token.lower()
@@ -349,4 +358,6 @@ class StoryParser:
             try:
                 return float(token)
             except ValueError:
+                if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", token):
+                    return token
                 raise ParseError(f"Invalid value: {token}")
