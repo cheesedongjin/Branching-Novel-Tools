@@ -472,15 +472,6 @@ class BranchingNovelApp(tk.Tk):
             if text.startswith("__", i):
                 j = text.find("__", i + 2)
                 if j != -1:
-                    placeholder = text[i : j + 2]
-                    if placeholder in self.state:
-                        result.append(str(self.state[placeholder]))
-                        i = j + 2
-                        continue
-                    if placeholder in self.story.variables:
-                        result.append(str(self.story.variables[placeholder]))
-                        i = j + 2
-                        continue
                     name = text[i + 2 : j]
                     if name in self.state:
                         result.append(str(self.state[name]))

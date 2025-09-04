@@ -456,7 +456,9 @@ class BranchingNovelApp(tk.Tk):
 
         # Variables can be embedded in text using ``__var__`` syntax.  We scan for
         # that pattern and replace it with the current value.  This logic mirrors
-        # the editor's interpolation so both behave consistently.
+        # the editor's interpolation so both behave consistently.  Variable names
+        # themselves are stored without surrounding underscores, so only the
+        # inner portion of the placeholder is used for lookups.
         variables = {**self.story.variables, **self.state}
 
         result: List[str] = []
@@ -465,11 +467,6 @@ class BranchingNovelApp(tk.Tk):
             if text.startswith("__", i):
                 j = text.find("__", i + 2)
                 if j != -1:
-                    placeholder = text[i : j + 2]
-                    if placeholder in variables:
-                        result.append(str(variables[placeholder]))
-                        i = j + 2
-                        continue
                     name = text[i + 2 : j]
                     if name in variables:
                         result.append(str(variables[name]))
