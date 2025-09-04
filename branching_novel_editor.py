@@ -531,12 +531,21 @@ def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) 
         return
 
     text = widget.get("1.0", "end-1c")
-    for m in re.finditer(r"__([A-Za-z0-9_]+)__", text):
-        token = m.group(0)
-        if token in vars_set:
-            start_pos = f"1.0+{m.start()}c"
-            end_pos = f"1.0+{m.end()}c"
-            widget.tag_add("var", start_pos, end_pos)
+    i = 0
+    while i < len(text):
+        if text.startswith("__", i):
+            j = text.find("__", i + 2)
+            name = text[i + 2 : j] if j != -1 else ""
+            token = text[i : j + 2] if j != -1 else ""
+            if j != -1 and name and re.fullmatch(r"[A-Za-z0-9_]+", name) and token in vars_set:
+                start_pos = f"1.0+{i}c"
+                end_pos = f"1.0+{j + 2}c"
+                widget.tag_add("var", start_pos, end_pos)
+                i = j + 2
+                continue
+            i = j + 2 if j != -1 else i + 2
+        else:
+            i += 1
 
     # 변수 스타일 설정
     base_font = tkfont.Font(font=widget.cget("font"))
@@ -1278,17 +1287,30 @@ class BranchingNovelApp(tk.Tk):
     def _interpolate(self, text: str) -> str:
         if not text:
             return ""
-        pattern = re.compile(r"__([A-Za-z0-9_]+)__")
 
-        def repl(m: re.Match[str]) -> str:
-            token = m.group(0)
-            if token in self.state:
-                return str(self.state[token])
-            if token in self.story.variables:
-                return str(self.story.variables[token])
-            return token
+        result = []
+        i = 0
+        while i < len(text):
+            if text.startswith("__", i):
+                j = text.find("__", i + 2)
+                name = text[i + 2 : j] if j != -1 else ""
+                if j != -1 and name and re.fullmatch(r"[A-Za-z0-9_]+", name):
+                    token = f"__{name}__"
+                    if token in self.state:
+                        result.append(str(self.state[token]))
+                    elif token in self.story.variables:
+                        result.append(str(self.story.variables[token]))
+                    else:
+                        result.append(token)
+                    i = j + 2
+                    continue
+                result.append("__")
+                i += 2
+            else:
+                result.append(text[i])
+                i += 1
 
-        return pattern.sub(repl, text)
+        return "".join(result)
 
     def _evaluate_condition(self, cond: str) -> bool:
         expr = self._to_python_expr(cond)
