@@ -464,11 +464,17 @@ class BranchingNovelApp(tk.Tk):
         while i < len(text):
             if text.startswith("__", i):
                 j = text.find("__", i + 2)
-                name = text[i + 2 : j] if j != -1 else ""
-                if j != -1 and name in variables:
-                    result.append(str(variables[name]))
-                    i = j + 2
-                    continue
+                if j != -1:
+                    placeholder = text[i : j + 2]
+                    if placeholder in variables:
+                        result.append(str(variables[placeholder]))
+                        i = j + 2
+                        continue
+                    name = text[i + 2 : j]
+                    if name in variables:
+                        result.append(str(variables[name]))
+                        i = j + 2
+                        continue
                 # Unmatched opening ``__`` – treat as literal characters.
                 result.append("__")
                 i += 2
