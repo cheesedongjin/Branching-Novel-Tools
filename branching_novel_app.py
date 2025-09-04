@@ -179,10 +179,11 @@ class BranchingNovelApp(tk.Tk):
             if item["pause"] > 0:
                 item["pause"] -= 1
                 continue
+            # advance offset before rendering so the loop completes
+            item["offset"] = (item["offset"] + 1) % len(full)
             display = full[item["offset"]:] + full[: item["offset"]]
             self.chapter_list.delete(item["index"])
             self.chapter_list.insert(item["index"], display)
-            item["offset"] = (item["offset"] + 1) % len(full)
             if item["offset"] == 0:
                 item["pause"] = self._marquee_pause_cycles
         if sel:
