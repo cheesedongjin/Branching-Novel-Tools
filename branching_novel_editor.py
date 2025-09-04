@@ -519,22 +519,28 @@ class VarAutocomplete:
         self._current_filter = ""
         self._is_filtering = False
 
-def highlight_variables(widget: tk.Text) -> None:
-    """Text 위젯에서 변수명 하이라이팅 (단순 변수명용)"""
+def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) -> None:
+    """Text 위젯에서 실제 변수만 하이라이팅"""
     try:
         widget.tag_remove("var", "1.0", tk.END)
     except tk.TclError:
         return
 
+    vars_set = set(get_vars()) if get_vars else set()
+    if not vars_set:
+        return
+
     text = widget.get("1.0", "end-1c")
 
     # 단순 변수명 패턴 (알파벳/언더스코어로 시작, 알파벳/숫자/언더스코어 포함)
-    var_pattern = re.compile(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b')
+    var_pattern = re.compile(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b")
 
     for match in var_pattern.finditer(text):
-        start_pos = f"1.0+{match.start()}c"
-        end_pos = f"1.0+{match.end()}c"
-        widget.tag_add("var", start_pos, end_pos)
+        name = match.group(0)
+        if name in vars_set:
+            start_pos = f"1.0+{match.start()}c"
+            end_pos = f"1.0+{match.end()}c"
+            widget.tag_add("var", start_pos, end_pos)
 
     # 변수 스타일 설정
     widget.tag_configure("var", foreground="navy", font=("Consolas", 11, "bold"))
@@ -1668,8 +1674,10 @@ class ChoiceEditor(tk.Toplevel):
         self.ent_text = tk.Text(frm, width=50, height=1, wrap="none")
         self.ent_text.grid(row=1, column=0, sticky="ew", pady=(0,8))
         self.auto_text = VarAutocomplete(self.ent_text, lambda: self.variables)
-        self.ent_text.bind("<KeyRelease>", lambda e: highlight_variables(self.ent_text))
-        highlight_variables(self.ent_text)
+        self.ent_text.bind("<KeyRelease>", lambda e: highlight_variables(self.ent_text, lambda: self.variables))
+        highlight_variables(self.ent_text, lambda: self.variables)
+        if hasattr(master, "register_var_drop_target"):
+            master.register_var_drop_target(self.ent_text)
         ttk.Button(frm, text="$", width=2, command=self.auto_text.trigger).grid(row=1, column=1, padx=(4,0))
 
         ttk.Label(frm, text=tr("target_branch_id")).grid(row=2, column=0, sticky="w")
@@ -1693,7 +1701,7 @@ class ChoiceEditor(tk.Toplevel):
 
         if choice:
             self.ent_text.insert("1.0", choice.text)
-            highlight_variables(self.ent_text)
+            highlight_variables(self.ent_text, lambda: self.variables)
             vals = list(self.cmb_target["values"])
             if choice.target_id not in vals:
                 vals.append(choice.target_id)
@@ -1766,6 +1774,8 @@ class ChapterEditor(tk.Tk):
         self.current_file: Optional[str] = None
         self.dirty: bool = False
         self.preview_modified: bool = False
+        self._drag_var_name: Optional[str] = None
+        self._var_drop_targets: set[tk.Widget] = set()
         self._preview_updating: bool = False
 
         self._build_menu()
@@ -1836,13 +1846,7 @@ class ChapterEditor(tk.Tk):
         self.ent_title = tk.Text(meta, width=30, height=1, wrap="none")
         self.ent_title.grid(row=0, column=1, sticky="ew", pady=(0, 6))
         self.ent_title.insert("1.0", self.story.title)
-        self.ent_title.bind(
-            "<KeyRelease>",
-            lambda e: (self._on_title_changed(), highlight_variables(self.ent_title)),
-        )
-        self.auto_title = VarAutocomplete(self.ent_title, lambda: self._collect_variables())
-        highlight_variables(self.ent_title)
-        ttk.Button(meta, text="$", width=2, command=self.auto_title.trigger).grid(row=0, column=2, padx=(4, 0))
+        self.ent_title.bind("<KeyRelease>", lambda e: self._on_title_changed())
 
         ttk.Label(meta, text=tr("start_branch_label")).grid(row=1, column=0, sticky="w")
         self.cmb_start = ttk.Combobox(meta, values=[], state="readonly")
@@ -1856,6 +1860,8 @@ class ChapterEditor(tk.Tk):
         self.ent_end.bind("<KeyRelease>", lambda e: self._on_ending_changed())
         self.auto_end = VarAutocomplete(self.ent_end, lambda: self._collect_variables())
         ttk.Button(meta, text="$", width=2, command=self.auto_end.trigger).grid(row=2, column=2, padx=(4, 0))
+        if hasattr(self, "register_var_drop_target"):
+            self.register_var_drop_target(self.ent_end)
 
         self.var_show_disabled = tk.BooleanVar(value=self.story.show_disabled)
         self.chk_show_disabled = ttk.Checkbutton(
@@ -1883,6 +1889,7 @@ class ChapterEditor(tk.Tk):
         self.tree_vars.column("var", width=80, anchor="w")
         self.tree_vars.column("val", width=80, anchor="w")
         self.tree_vars.grid(row=1, column=0, sticky="ew")
+        self.tree_vars.bind("<ButtonPress-1>", self._on_var_drag_start)
 
         # 챕터 목록
         chap_frame = ttk.LabelFrame(left, text=tr("chapter_list"), padding=8)
@@ -1943,9 +1950,10 @@ class ChapterEditor(tk.Tk):
         self.ent_ch_title.grid(row=1, column=1, sticky="ew", pady=(0, 6))
         self.ent_ch_title.bind("<FocusOut>", lambda e: self._apply_chapter_id_title())
         self.ent_ch_title.bind("<Return>", lambda e: self._apply_chapter_id_title())
-        self.ent_ch_title.bind("<KeyRelease>", lambda e: highlight_variables(self.ent_ch_title))
+        self.ent_ch_title.bind("<KeyRelease>", lambda e: highlight_variables(self.ent_ch_title, lambda: self._collect_variables()))
         self.auto_ch_title = VarAutocomplete(self.ent_ch_title, lambda: self._collect_variables())
-        highlight_variables(self.ent_ch_title)
+        highlight_variables(self.ent_ch_title, lambda: self._collect_variables())
+        self.register_var_drop_target(self.ent_ch_title)
         ttk.Button(edit_tab, text="$", width=2, command=self.auto_ch_title.trigger).grid(row=1, column=2, padx=(4, 0))
 
         ttk.Label(edit_tab, text=tr("branch_id")).grid(row=2, column=0, sticky="w")
@@ -1959,9 +1967,10 @@ class ChapterEditor(tk.Tk):
         self.ent_br_title.grid(row=3, column=1, sticky="ew", pady=(0, 6))
         self.ent_br_title.bind("<FocusOut>", lambda e: self._apply_branch_id_title())
         self.ent_br_title.bind("<Return>", lambda e: self._apply_branch_id_title())
-        self.ent_br_title.bind("<KeyRelease>", lambda e: highlight_variables(self.ent_br_title))
+        self.ent_br_title.bind("<KeyRelease>", lambda e: highlight_variables(self.ent_br_title, lambda: self._collect_variables()))
         self.auto_br_title = VarAutocomplete(self.ent_br_title, lambda: self._collect_variables())
-        highlight_variables(self.ent_br_title)
+        highlight_variables(self.ent_br_title, lambda: self._collect_variables())
+        self.register_var_drop_target(self.ent_br_title)
         ttk.Button(edit_tab, text="$", width=2, command=self.auto_br_title.trigger).grid(row=3, column=2, padx=(4, 0))
 
         # 본문
@@ -1978,8 +1987,9 @@ class ChapterEditor(tk.Tk):
         scr.grid(row=0, column=1, sticky="ns")
         self.txt_body.configure(yscrollcommand=scr.set)
         self.auto_body = VarAutocomplete(self.txt_body, lambda: self._collect_variables())
-        self.txt_body.bind("<KeyRelease>", lambda e: highlight_variables(self.txt_body))
-        highlight_variables(self.txt_body)
+        self.txt_body.bind("<KeyRelease>", lambda e: highlight_variables(self.txt_body, lambda: self._collect_variables()))
+        highlight_variables(self.txt_body, lambda: self._collect_variables())
+        self.register_var_drop_target(self.txt_body)
         ttk.Button(body_frame, text="$", width=2, command=self.auto_body.trigger).grid(row=0, column=2, padx=(4, 0), sticky="ns")
         self.txt_body.bind("<<Modified>>", self._on_body_modified)
 
@@ -2046,9 +2056,67 @@ class ChapterEditor(tk.Tk):
 
         root.pack(fill="both", expand=True)
 
+    def register_var_drop_target(self, widget: tk.Widget) -> None:
+        self._var_drop_targets.add(widget)
+        widget.bind("<Destroy>", lambda e, w=widget: self._var_drop_targets.discard(w))
+
+    def _on_var_drag_start(self, event):
+        item = self.tree_vars.identify_row(event.y)
+        if not item:
+            return
+        self._drag_var_name = self.tree_vars.item(item, "values")[0]
+        self.bind_all("<Motion>", self._on_var_drag_motion)
+        self.bind_all("<ButtonRelease-1>", self._on_var_drag_release)
+
+    def _on_var_drag_motion(self, event):
+        if not self._drag_var_name:
+            return
+        widget = self.winfo_containing(event.x_root, event.y_root)
+        if widget in self._var_drop_targets:
+            x = event.x_root - widget.winfo_rootx()
+            y = event.y_root - widget.winfo_rooty()
+            if isinstance(widget, tk.Text):
+                idx = widget.index(f"@{x},{y}")
+                widget.mark_set("insert", idx)
+                widget.focus_force()
+            else:
+                try:
+                    idx = widget.index(f"@{x}")
+                except tk.TclError:
+                    idx = widget.index(tk.INSERT)
+                widget.icursor(idx)
+                widget.focus_force()
+
+    def _on_var_drag_release(self, event):
+        if not self._drag_var_name:
+            return
+        widget = self.winfo_containing(event.x_root, event.y_root)
+        if widget in self._var_drop_targets:
+            x = event.x_root - widget.winfo_rootx()
+            y = event.y_root - widget.winfo_rooty()
+            if isinstance(widget, tk.Text):
+                idx = widget.index(f"@{x},{y}")
+                widget.insert(idx, self._drag_var_name)
+                highlight_variables(widget, lambda: self._collect_variables())
+            else:
+                try:
+                    idx = widget.index(f"@{x}")
+                except tk.TclError:
+                    idx = widget.index(tk.INSERT)
+                widget.insert(idx, self._drag_var_name)
+            widget.focus_force()
+        self._drag_var_name = None
+        self.unbind_all("<Motion>")
+        self.unbind_all("<ButtonRelease-1>")
+
     # ---------- 핸들러 ----------
     def _on_title_changed(self):
-        self.story.title = self.ent_title.get("1.0", "end-1c").strip() or "Untitled"
+        text = self.ent_title.get("1.0", "end-1c")
+        if VAR_PATTERN.search(text):
+            text = VAR_PATTERN.sub("", text)
+            self.ent_title.delete("1.0", tk.END)
+            self.ent_title.insert("1.0", text)
+        self.story.title = text.strip() or "Untitled"
         self._set_dirty(True)
         self._update_preview()
 
@@ -2141,7 +2209,7 @@ class ChapterEditor(tk.Tk):
         self.ent_ch_id.insert(0, ch.chapter_id)
         self.ent_ch_title.delete("1.0", tk.END)
         self.ent_ch_title.insert("1.0", ch.title)
-        highlight_variables(self.ent_ch_title)
+        highlight_variables(self.ent_ch_title, lambda: self._collect_variables())
         self._refresh_branch_list()
         first = next(iter(ch.branches.keys()), None)
         if first:
@@ -2154,13 +2222,13 @@ class ChapterEditor(tk.Tk):
         self.ent_br_id.insert(0, br.branch_id)
         self.ent_br_title.delete("1.0", tk.END)
         self.ent_br_title.insert("1.0", br.title)
-        highlight_variables(self.ent_br_title)
+        highlight_variables(self.ent_br_title, lambda: self._collect_variables())
 
         self.txt_body.config(state="normal")
         self.txt_body.delete("1.0", tk.END)
         if br.paragraphs:
             self.txt_body.insert(tk.END, "\n\n".join(br.paragraphs))
-        highlight_variables(self.txt_body)
+        highlight_variables(self.txt_body, lambda: self._collect_variables())
         self.txt_body.edit_modified(False)
 
         for i in self.tree_choices.get_children():
@@ -2621,7 +2689,7 @@ class ChapterEditor(tk.Tk):
         end = f"{start}+{len(query)}c"
         self.txt_body.delete(start, end)
         self.txt_body.insert(start, replacement)
-        highlight_variables(self.txt_body)
+        highlight_variables(self.txt_body, lambda: self._collect_variables())
         self._apply_body_to_model()
         self._build_find_results(query, self.find_scope.get())
         self._find_step(1)
@@ -2663,7 +2731,6 @@ class ChapterEditor(tk.Tk):
         )
         self.ent_title.delete("1.0", tk.END)
         self.ent_title.insert("1.0", self.story.title)
-        highlight_variables(self.ent_title)
         self._refresh_chapter_list()
         # 미리보기에서 변경된 메타데이터를 반영
         self._refresh_meta_panel()
@@ -2673,7 +2740,7 @@ class ChapterEditor(tk.Tk):
                 self._load_branch_to_form(self.current_branch_id)
         else:
             self.txt_body.delete("1.0", tk.END)
-            highlight_variables(self.txt_body)
+            highlight_variables(self.txt_body, lambda: self._collect_variables())
             for i in self.tree_choices.get_children():
                 self.tree_choices.delete(i)
         # 미리보기 텍스트의 수정 플래그 초기화
@@ -2753,7 +2820,6 @@ class ChapterEditor(tk.Tk):
         self.current_file = None
         self.ent_title.delete("1.0", tk.END)
         self.ent_title.insert("1.0", self.story.title)
-        highlight_variables(self.ent_title)
         self._refresh_chapter_list()
         self._load_chapter_to_form(ch_id)
         self._refresh_meta_panel()
@@ -2786,7 +2852,6 @@ class ChapterEditor(tk.Tk):
 
         self.ent_title.delete("1.0", tk.END)
         self.ent_title.insert("1.0", self.story.title)
-        highlight_variables(self.ent_title)
         self._refresh_chapter_list()
         if self.current_chapter_id:
             self._load_chapter_to_form(self.current_chapter_id)
