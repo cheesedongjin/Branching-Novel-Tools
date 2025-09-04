@@ -760,21 +760,17 @@ class BranchingNovelApp(tk.Tk):
     def _interpolate(self, text: str) -> str:
         if not text:
             return ""
-        vars_list = sorted(self.story.variables.keys(), key=len, reverse=True)
-        result: List[str] = []
-        idx = 0
-        length = len(text)
-        while idx < length:
-            for name in vars_list:
-                if text.startswith(name, idx):
-                    val = self.state.get(name, self.story.variables.get(name, ""))
-                    result.append(str(val))
-                    idx += len(name)
-                    break
-            else:
-                result.append(text[idx])
-                idx += 1
-        return "".join(result)
+        pattern = re.compile(r"__([A-Za-z0-9_]+)__")
+
+        def repl(m: re.Match[str]) -> str:
+            token = m.group(0)
+            if token in self.state:
+                return str(self.state[token])
+            if token in self.story.variables:
+                return str(self.story.variables[token])
+            return token
+
+        return pattern.sub(repl, text)
 
     def _evaluate_condition(self, cond: str) -> bool:
         expr = self._to_python_expr(cond)
