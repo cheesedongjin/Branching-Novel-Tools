@@ -472,16 +472,17 @@ class BranchingNovelApp(tk.Tk):
             if text.startswith("__", i):
                 j = text.find("__", i + 2)
                 name = text[i + 2 : j] if j != -1 else ""
-                if j != -1 and name and re.fullmatch(r"[A-Za-z0-9_]+", name):
-                    token = f"__{name}__"
-                    if token in self.state:
-                        result.append(str(self.state[token]))
-                    elif token in self.story.variables:
-                        result.append(str(self.story.variables[token]))
-                    else:
-                        result.append(token)
-                    i = j + 2
-                    continue
+                if j != -1 and name:
+                    if name in self.state:
+                        result.append(str(self.state[name]))
+                        i = j + 2
+                        continue
+                    if name in self.story.variables:
+                        result.append(str(self.story.variables[name]))
+                        i = j + 2
+                        continue
+                # Either no closing ``__`` or unknown variable; treat the leading
+                # ``__`` as literal and continue scanning.
                 result.append("__")
                 i += 2
             else:
