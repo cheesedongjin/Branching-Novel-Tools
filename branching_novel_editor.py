@@ -50,10 +50,10 @@ INSTALLER_NAME = "BranchingNovelEditor-Online-Setup.exe"
 
 
 def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) -> None:
-    """Highlight ``__var__`` placeholders that reference defined variables.
+    """Highlight ``__var__`` placeholders referencing defined variables.
 
-    This mirrors the variable interpolation logic used by the parser, ensuring
-    that the editor and runtime treat placeholders consistently.
+    The scanning logic mirrors ``BranchingNovelApp``'s variable interpolation
+    so that the editor and runtime interpret placeholders identically.
     """
     try:
         widget.tag_remove("var", "1.0", tk.END)
@@ -65,12 +65,31 @@ def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) 
         return
 
     text = widget.get("1.0", "end-1c")
-    for m in VAR_PATTERN.finditer(text):
+    i = 0
+    n = len(text)
+    while i < n:
+        j = text.find("__", i)
+        if j == -1:
+            break
+
+        k = j + 2
+        m = re.match(r"([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)", text[k:])
+        if not m:
+            i = k
+            continue
+
         name = m.group(1)
-        if name in vars_set:
-            start_pos = f"1.0+{m.start()}c"
-            end_pos = f"1.0+{m.end()}c"
-            widget.tag_add("var", start_pos, end_pos)
+        k += m.end()
+
+        if k + 2 <= n and text.startswith("__", k):
+            if name in vars_set:
+                start_pos = f"1.0+{j}c"
+                end_pos = f"1.0+{k + 2}c"
+                widget.tag_add("var", start_pos, end_pos)
+            # 정의 여부에 따라 소비 범위 결정
+            i = k + 2 if name in vars_set else k
+        else:
+            i = j + 2
 
     # 변수 스타일 설정
     base_font = tkfont.Font(font=widget.cget("font"))
