@@ -86,7 +86,7 @@ class Choice:
 class Action:
     op: str  # e.g. 'set', 'add', 'sub', 'mul', 'div', 'floordiv', 'mod', 'pow'
     var: str
-    value: Union[int, float, bool]
+    value: Union[int, float, bool, str]
 
 
 @dataclass
@@ -118,7 +118,7 @@ class Story:
     show_disabled: bool = False
     chapters: Dict[str, Chapter] = field(default_factory=dict)
     branches: Dict[str, Branch] = field(default_factory=dict)
-    variables: Dict[str, Union[int, float, bool]] = field(default_factory=dict)
+    variables: Dict[str, Union[int, float, bool, str]] = field(default_factory=dict)
 
     def get_branch(self, bid: str) -> Optional[Branch]:
         return self.branches.get(bid)
@@ -349,12 +349,19 @@ class StoryParser:
             return Action(op=op_map[op], var=var.strip(), value=self._parse_value(val.strip()))
         raise ParseError("Unknown action command.")
 
-    def _parse_value(self, token: str) -> Union[int, float, bool]:
+    def _parse_value(self, token: str) -> Union[int, float, bool, str]:
         t = token.lower()
         if t == "true":
             return True
         if t == "false":
             return False
+        if (token.startswith('"') and token.endswith('"')) or (
+            token.startswith("'") and token.endswith("'")
+        ):
+            try:
+                return ast.literal_eval(token)
+            except Exception:
+                raise ParseError(f"Invalid value: {token}")
         try:
             return int(token)
         except ValueError:
@@ -389,7 +396,7 @@ class BranchingNovelApp(tk.Tk):
 
         # state values and options
         self.show_disabled = show_disabled
-        self.state: Dict[str, Union[int, float, bool]] = {}
+        self.state: Dict[str, Union[int, float, bool, str]] = {}
 
         # history and current index
         self.history: List[Step] = []
@@ -699,8 +706,8 @@ class BranchingNovelApp(tk.Tk):
                 break
         self.chapter_list.configure(state=state)
 
-    def _compute_state(self, upto_index: int) -> Dict[str, Union[int, float, bool]]:
-        state: Dict[str, Union[int, float, bool]] = dict(self.story.variables)
+    def _compute_state(self, upto_index: int) -> Dict[str, Union[int, float, bool, str]]:
+        state: Dict[str, Union[int, float, bool, str]] = dict(self.story.variables)
         for i in range(0, upto_index + 1):
             step = self.history[i]
             br = self.story.get_branch(step.branch_id)
@@ -708,11 +715,12 @@ class BranchingNovelApp(tk.Tk):
                 continue
             for act in br.actions:
                 cur = state.get(act.var, 0)
-                if isinstance(cur, bool):
-                    cur = int(cur)
                 val = act.value
-                if isinstance(val, bool):
-                    val = int(val)
+                if act.op != "set":
+                    if isinstance(cur, bool):
+                        cur = int(cur)
+                    if isinstance(val, bool):
+                        val = int(val)
                 if act.op == "set":
                     state[act.var] = val
                 elif act.op == "add":

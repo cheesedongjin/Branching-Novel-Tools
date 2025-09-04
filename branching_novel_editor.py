@@ -38,7 +38,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from i18n import tr, set_language, set_language_from_file
 from dataclasses import dataclass, field
-from typing import Any, List, Dict, Optional, Callable, Iterable, Tuple, Union
+from typing import Any, List, Dict, Optional, Callable, Iterable, Tuple, Union, Set
 
 from auto_update import check_for_update
 
@@ -558,7 +558,7 @@ class Choice:
 class Action:
     op: str  # e.g. 'set', 'add', 'sub', 'mul', 'div', 'floordiv', 'mod', 'pow'
     var: str
-    value: Union[int, float, bool]
+    value: Union[int, float, bool, str]
 
 @dataclass
 class Branch:
@@ -584,7 +584,7 @@ class Story:
     show_disabled: bool = False
     chapters: Dict[str, Chapter] = field(default_factory=dict)
     branches: Dict[str, Branch] = field(default_factory=dict)
-    variables: Dict[str, Union[int, float, bool]] = field(default_factory=dict)
+    variables: Dict[str, Union[int, float, bool, str]] = field(default_factory=dict)
 
     def get_chapter(self, cid: str) -> Optional[Chapter]:
         return self.chapters.get(cid)
@@ -626,7 +626,12 @@ class Story:
             lines.append("@show-disabled: true")
         for var in sorted(self.variables.keys()):
             val = self.variables[var]
-            val_str = str(val).lower() if isinstance(val, bool) else val
+            if isinstance(val, bool):
+                val_str = str(val).lower()
+            elif isinstance(val, str):
+                val_str = repr(val)
+            else:
+                val_str = val
             lines.append(f"! {var} = {val_str}")
         lines.append("")
 
@@ -649,12 +654,18 @@ class Story:
                     "pow": "**=",
                 }
                 for act in br.actions:
+                    if isinstance(act.value, bool):
+                        v = str(act.value).lower()
+                    elif isinstance(act.value, str):
+                        v = repr(act.value)
+                    else:
+                        v = act.value
                     if act.op == "set":
-                        lines.append(f"! {act.var} = {act.value}")
+                        lines.append(f"! {act.var} = {v}")
                     else:
                         sym = op_map.get(act.op)
                         if sym:
-                            lines.append(f"! {act.var} {sym} {act.value}")
+                            lines.append(f"! {act.var} {sym} {v}")
                 for c in br.choices:
                     if c.condition:
                         lines.append(f"* [{c.condition}] {c.text} -> {c.target_id}")
@@ -851,12 +862,19 @@ class StoryParser:
             return Action(op=op_map[op], var=var.strip(), value=self._parse_value(val.strip()))
         raise ParseError("Unknown action command.")
 
-    def _parse_value(self, token: str) -> Union[int, float, bool]:
+    def _parse_value(self, token: str) -> Union[int, float, bool, str]:
         t = token.lower()
         if t == "true":
             return True
         if t == "false":
             return False
+        if (token.startswith('"') and token.endswith('"')) or (
+            token.startswith("'") and token.endswith("'")
+        ):
+            try:
+                return ast.literal_eval(token)
+            except Exception:
+                raise ParseError(f"Invalid value: {token}")
         try:
             return int(token)
         except ValueError:
@@ -892,7 +910,7 @@ class BranchingNovelApp(tk.Tk):
 
         # 상태 값과 옵션
         self.show_disabled = show_disabled
-        self.state: Dict[str, Union[int, float, bool]] = {}
+        self.state: Dict[str, Union[int, float, bool, str]] = {}
 
         # 히스토리와 현재 인덱스
         self.history: List[Step] = []
@@ -1199,8 +1217,8 @@ class BranchingNovelApp(tk.Tk):
                 break
         self.chapter_list.configure(state=state)
 
-    def _compute_state(self, upto_index: int) -> Dict[str, Union[int, float, bool]]:
-        state: Dict[str, Union[int, float, bool]] = dict(self.story.variables)
+    def _compute_state(self, upto_index: int) -> Dict[str, Union[int, float, bool, str]]:
+        state: Dict[str, Union[int, float, bool, str]] = dict(self.story.variables)
         for i in range(0, upto_index + 1):
             step = self.history[i]
             br = self.story.get_branch(step.branch_id)
@@ -1208,11 +1226,12 @@ class BranchingNovelApp(tk.Tk):
                 continue
             for act in br.actions:
                 cur = state.get(act.var, 0)
-                if isinstance(cur, bool):
-                    cur = int(cur)
                 val = act.value
-                if isinstance(val, bool):
-                    val = int(val)
+                if act.op != "set":
+                    if isinstance(cur, bool):
+                        cur = int(cur)
+                    if isinstance(val, bool):
+                        val = int(val)
                 if act.op == "set":
                     state[act.var] = val
                 elif act.op == "add":
@@ -1484,13 +1503,13 @@ class ConditionRowDialog(tk.Toplevel):
 
 
 class VariableDialog(tk.Toplevel):
-    def __init__(self, master, name: str = "", value: Optional[Union[int, float, bool]] = None):
+    def __init__(self, master, name: str = "", value: Optional[Union[int, float, bool, str]] = None):
         super().__init__(master)
         self.title(tr("add_variable") if not name else tr("edit_variable"))
         self.resizable(False, False)
         self.result_ok = False
         self.var_name: str = name
-        self.value: Union[int, float, bool] = value if value is not None else 0
+        self.value: Union[int, float, bool, str] = value if value is not None else 0
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
@@ -1505,7 +1524,12 @@ class VariableDialog(tk.Toplevel):
         self.ent_val = ttk.Entry(frm, width=10)
         self.ent_val.grid(row=1, column=1, sticky="ew", padx=(8,0))
         if value is not None:
-            self.ent_val.insert(0, str(value).lower() if isinstance(value, bool) else str(value))
+            if isinstance(value, bool):
+                self.ent_val.insert(0, str(value).lower())
+            elif isinstance(value, str):
+                self.ent_val.insert(0, f"{value!r}")
+            else:
+                self.ent_val.insert(0, str(value))
 
         btns = ttk.Frame(frm)
         btns.grid(row=2, column=0, columnspan=2, sticky="e", pady=(10,0))
@@ -1527,9 +1551,17 @@ class VariableDialog(tk.Toplevel):
             messagebox.showerror(tr("error"), tr("input_var_init_required"))
             return
         if val_text.lower() == "true":
-            val: Union[int, float, bool] = True
+            val: Union[int, float, bool, str] = True
         elif val_text.lower() == "false":
             val = False
+        elif (val_text.startswith('"') and val_text.endswith('"')) or (
+            val_text.startswith("'") and val_text.endswith("'")
+        ):
+            try:
+                val = ast.literal_eval(val_text)
+            except Exception:
+                messagebox.showerror(tr("error"), tr("invalid_initial_value"))
+                return
         else:
             try:
                 val = int(val_text)
@@ -2470,7 +2502,12 @@ class ChapterEditor(tk.Tk):
         for i in self.tree_vars.get_children():
             self.tree_vars.delete(i)
         for name, val in self.story.variables.items():
-            val_str = str(val).lower() if isinstance(val, bool) else val
+            if isinstance(val, bool):
+                val_str = str(val).lower()
+            elif isinstance(val, str):
+                val_str = repr(val)
+            else:
+                val_str = val
             self.tree_vars.insert("", tk.END, values=(name, val_str))
 
     def _add_variable(self):
@@ -2786,6 +2823,27 @@ class ChapterEditor(tk.Tk):
         for cid, ch in self.story.chapters.items():
             if not ch.branches:
                 warnings.append(tr("warn_chapter_no_branches", id=cid))
+
+        # numeric-only operator vs non-numeric variable check
+        var_types: Dict[str, Set[type]] = {}
+        for name, val in self.story.variables.items():
+            var_types.setdefault(name, set()).add(type(val))
+        for br in self.story.branches.values():
+            for act in br.actions:
+                var_types.setdefault(act.var, set()).add(type(act.value))
+        numeric_ops = {"add", "sub", "mul", "div", "floordiv", "mod", "pow"}
+        warned = set()
+        for br in self.story.branches.values():
+            for act in br.actions:
+                if act.op in numeric_ops:
+                    types = var_types.get(act.var, set())
+                    if bool in types or str in types:
+                        key = (act.var, act.op)
+                        if key not in warned:
+                            warned.add(key)
+                            warnings.append(
+                                tr("warn_numeric_non_numeric", var=act.var, op=act.op)
+                            )
 
         msg = []
         if errors:
@@ -3124,16 +3182,20 @@ class ChapterEditor(tk.Tk):
             st = dict(pre_state)
             for act in actions:
                 var = act.var
-                val = act.value
-                if isinstance(val, bool): val = int(val)
                 cur = st.get(var, as_point(0.0))
+                val = act.value
+                if isinstance(val, bool):
+                    val = int(val)
+                if not isinstance(val, (int, float)):
+                    st[var] = widen_unknown(cur)
+                    continue
                 if act.op == "set":
                     st[var] = as_point(val)
                 elif act.op == "add":
-                    lo, hi = cur;
+                    lo, hi = cur
                     st[var] = (lo + val, hi + val)
                 elif act.op == "sub":
-                    lo, hi = cur;
+                    lo, hi = cur
                     st[var] = (lo - val, hi - val)
                 else:
                     st[var] = widen_unknown(cur)
@@ -3145,7 +3207,11 @@ class ChapterEditor(tk.Tk):
                 var = act.var
                 a = v.get(var, 0.0)
                 b = act.value
-                if isinstance(b, bool): b = int(b)
+                if isinstance(b, bool):
+                    b = int(b)
+                if not isinstance(b, (int, float)):
+                    v[var] = float('nan')
+                    continue
                 if act.op == "set":
                     v[var] = float(b)
                 elif act.op == "add":
