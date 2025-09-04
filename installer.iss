@@ -77,23 +77,6 @@ begin
          '', SW_HIDE, ewWaitUntilTerminated, ResultCode)
     and (ResultCode = 0);
 end;
- 
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  Lang, Base: String;
-begin
-  if CurStep = ssPostInstall then
-  begin
-    if ActiveLanguage = 'korean' then
-      Lang := 'ko'
-    else
-      Lang := 'en';
-    Base := ExpandConstant('{app}\');
-    SaveStringToFile(Base + 'language.txt', Lang, False);
-    SaveStringToFile(Base + 'editor_language.txt', Lang, False);
-    SaveStringToFile(Base + 'game_language.txt', Lang, False);
-  end;
-end;
 
 procedure EnsureParentDirExists(const FilePath: String);
 var
@@ -250,7 +233,6 @@ begin
     '  Copy-Item -Path (Join-Path $temp ''*'') -Destination $target -Recurse -Force -ErrorAction Stop; ' +
     '} ' +
 
-    { If no EXE in root, search in subdirs and move to root }
     '$expectedExe = Join-Path $target ' + PSQuote('{#MyAppExe}') + '; ' +
     'if (-not (Test-Path -LiteralPath $expectedExe)) { ' +
     '  $found = Get-ChildItem -Path $target -Filter ' + PSQuote('{#MyAppExe}') + ' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1; ' +
@@ -266,10 +248,12 @@ begin
   Result := WriteAndRunPS(Cmd, LogPath, 'expand_zip');
 end;
 
+{ SINGLE CurStepChanged: merge install-phase work and language-file writing }
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ZipPath, ShaPath, LogPath: String;
   Ok: Boolean;
+  Lang, Base: String;
 begin
   if CurStep = ssInstall then
   begin
@@ -316,5 +300,17 @@ begin
     end;
 
     SafeAddToLog(LogPath, 'END OK');
+  end
+  else if CurStep = ssPostInstall then
+  begin
+    if ActiveLanguage = 'korean' then
+      Lang := 'ko'
+    else
+      Lang := 'en';
+
+    Base := ExpandConstant('{app}\');
+    SaveStringToFile(Base + 'language.txt', Lang, False);
+    SaveStringToFile(Base + 'editor_language.txt', Lang, False);
+    SaveStringToFile(Base + 'game_language.txt', Lang, False);
   end;
 end;
