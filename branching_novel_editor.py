@@ -2055,17 +2055,21 @@ class ChapterEditor(tk.Tk):
         # numeric-only operator vs non-numeric variable check
         var_types: Dict[str, Set[type]] = {}
         for name, val in self.story.variables.items():
-            var_types.setdefault(name, set()).add(type(val))
+            var_types.setdefault(name, set()).add(int if isinstance(val, bool) else type(val))
         for br in self.story.branches.values():
             for act in br.actions:
-                var_types.setdefault(act.var, set()).add(type(act.value))
+                if act.op == "expr":
+                    # Expression results are dynamic; skip type inference to avoid false positives
+                    continue
+                val_type = int if isinstance(act.value, bool) else type(act.value)
+                var_types.setdefault(act.var, set()).add(val_type)
         numeric_ops = {"add", "sub", "mul", "div", "floordiv", "mod", "pow"}
         warned = set()
         for br in self.story.branches.values():
             for act in br.actions:
                 if act.op in numeric_ops:
                     types = var_types.get(act.var, set())
-                    if bool in types or str in types:
+                    if str in types:
                         key = (act.var, act.op)
                         if key not in warned:
                             warned.add(key)
