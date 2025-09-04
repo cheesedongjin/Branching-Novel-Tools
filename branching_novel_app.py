@@ -484,9 +484,9 @@ class BranchingNovelApp(tk.Tk):
             k = j + 2
             m = re.match(r"([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)", s[k:])
             if not m:
-                # 식별자 없으면 '__' 자체를 리터럴로 취급
-                out_parts.append("__")
-                i = k
+                # 슬라이딩: '___var__'처럼 '__' 뒤에 식별자가 없으면 '_'만 소비하고 한 칸 전진
+                out_parts.append("_")
+                i = j + 1
                 continue
 
             name = m.group(1)
@@ -504,9 +504,9 @@ class BranchingNovelApp(tk.Tk):
                     out_parts.append(s[j:k])
                     i = k
             else:
-                # 닫힘 '__' 없으면 앞의 '__'는 리터럴
-                out_parts.append("__")
-                i = j + 2
+                # 슬라이딩: 닫힘 '__'가 없으면 '_'만 소비하고 한 칸 전진
+                out_parts.append("_")
+                i = j + 1
 
         return "".join(out_parts)
 

@@ -75,7 +75,8 @@ def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) 
         k = j + 2
         m = re.match(r"([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)", text[k:])
         if not m:
-            i = k
+            # 슬라이딩: '___var__'처럼 '__' 뒤에 식별자가 없으면 '_'만 소비
+            i = j + 1
             continue
 
         name = m.group(1)
@@ -89,7 +90,8 @@ def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) 
             # 정의 여부에 따라 소비 범위 결정
             i = k + 2 if name in vars_set else k
         else:
-            i = j + 2
+            # 슬라이딩: 닫힘 '__'가 없으면 '_'만 소비
+            i = j + 1
 
     # 변수 스타일 설정
     base_font = tkfont.Font(font=widget.cget("font"))
