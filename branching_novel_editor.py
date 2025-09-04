@@ -1261,6 +1261,9 @@ class VariableDialog(tk.Toplevel):
         if not name or not val_text:
             messagebox.showerror(tr("error"), tr("input_var_init_required"))
             return
+        if re.fullmatch(r"_+", name):
+            messagebox.showerror(tr("error"), tr("invalid_variable_name"))
+            return
         if val_text.lower() == "true":
             val: Union[int, float, bool, str] = True
         elif val_text.lower() == "false":
