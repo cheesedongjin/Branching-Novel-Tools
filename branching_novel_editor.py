@@ -522,30 +522,29 @@ class VarAutocomplete:
         self._is_filtering = False
 
 def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) -> None:
-    """Text 위젯에서 실제 변수만 하이라이팅"""
+    """Highlight only defined variables in a Text widget."""
     try:
         widget.tag_remove("var", "1.0", tk.END)
     except tk.TclError:
         return
-    vars_set = set(get_vars()) if get_vars else set()
-    if not vars_set:
+
+    vars_list = sorted(set(get_vars()), key=len, reverse=True) if get_vars else []
+    if not vars_list:
         return
 
     text = widget.get("1.0", "end-1c")
     i = 0
     while i < len(text):
-        if text.startswith("__", i):
-            j = text.find("__", i + 2)
-            name = text[i + 2 : j] if j != -1 else ""
-            token = text[i : j + 2] if j != -1 else ""
-            if j != -1 and name and re.fullmatch(r"[A-Za-z0-9_]+", name) and token in vars_set:
+        matched = False
+        for name in vars_list:
+            if text.startswith(name, i):
                 start_pos = f"1.0+{i}c"
-                end_pos = f"1.0+{j + 2}c"
+                end_pos = f"1.0+{i + len(name)}c"
                 widget.tag_add("var", start_pos, end_pos)
-                i = j + 2
-                continue
-            i += 1
-        else:
+                i += len(name)
+                matched = True
+                break
+        if not matched:
             i += 1
 
     # 변수 스타일 설정
