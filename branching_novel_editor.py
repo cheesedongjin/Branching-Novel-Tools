@@ -66,19 +66,12 @@ def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) 
         return
 
     text = widget.get("1.0", "end-1c")
-    i = 0
-    while i < len(text):
-        if text.startswith("__", i):
-            j = text.find("__", i + 2)
-            if j != -1:
-                name = text[i + 2 : j]
-                if name in vars_set:
-                    start_pos = f"1.0+{i}c"
-                    end_pos = f"1.0+{j + 2}c"
-                    widget.tag_add("var", start_pos, end_pos)
-                i = j + 2
-                continue
-        i += 1
+    for m in VAR_PATTERN.finditer(text):
+        name = m.group(1)
+        if name in vars_set:
+            start_pos = f"1.0+{m.start()}c"
+            end_pos = f"1.0+{m.end()}c"
+            widget.tag_add("var", start_pos, end_pos)
 
     # 변수 스타일 설정
     base_font = tkfont.Font(font=widget.cget("font"))
@@ -469,30 +462,13 @@ class BranchingNovelApp(tk.Tk):
         if not text:
             return ""
 
-        result = []
-        i = 0
-        while i < len(text):
-            if text.startswith("__", i):
-                j = text.find("__", i + 2)
-                if j != -1:
-                    name = text[i + 2 : j]
-                    if name in self.state:
-                        result.append(str(self.state[name]))
-                        i = j + 2
-                        continue
-                    if name in self.story.variables:
-                        result.append(str(self.story.variables[name]))
-                        i = j + 2
-                        continue
-                # Either no closing ``__`` or unknown variable; treat the leading
-                # ``__`` as literal and continue scanning.
-                result.append("__")
-                i += 2
-            else:
-                result.append(text[i])
-                i += 1
+        variables = {**self.story.variables, **self.state}
 
-        return "".join(result)
+        def repl(match: re.Match[str]) -> str:
+            name = match.group(1)
+            return str(variables.get(name, match.group(0)))
+
+        return VAR_PATTERN.sub(repl, text)
 
     def _evaluate_condition(self, cond: str) -> bool:
         expr = self._to_python_expr(cond)
