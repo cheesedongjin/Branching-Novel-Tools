@@ -47,35 +47,38 @@ from story_parser import Choice, Action, Branch, Chapter, Story, ParseError, Sto
 
 APP_NAME = "Branching Novel Editor"
 INSTALLER_NAME = "BranchingNovelEditor-Online-Setup.exe"
-
-VAR_PATTERN = re.compile(r"\$\{[^}]+\}")
+VAR_PATTERN = re.compile(r"__([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)__")
 
 
 def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) -> None:
-    """Highlight only defined variables in a Text widget."""
+    """Highlight ``__var__`` placeholders that reference defined variables.
+
+    This mirrors the variable interpolation logic used by the parser, ensuring
+    that the editor and runtime treat placeholders consistently.
+    """
     try:
         widget.tag_remove("var", "1.0", tk.END)
     except tk.TclError:
         return
 
-    vars_list = sorted(set(get_vars()), key=len, reverse=True) if get_vars else []
-    if not vars_list:
+    vars_set = set(get_vars()) if get_vars else set()
+    if not vars_set:
         return
 
     text = widget.get("1.0", "end-1c")
     i = 0
     while i < len(text):
-        matched = False
-        for name in vars_list:
-            if text.startswith(name, i):
-                start_pos = f"1.0+{i}c"
-                end_pos = f"1.0+{i + len(name)}c"
-                widget.tag_add("var", start_pos, end_pos)
-                i += len(name)
-                matched = True
-                break
-        if not matched:
-            i += 1
+        if text.startswith("__", i):
+            j = text.find("__", i + 2)
+            if j != -1:
+                name = text[i + 2 : j]
+                if name in vars_set:
+                    start_pos = f"1.0+{i}c"
+                    end_pos = f"1.0+{j + 2}c"
+                    widget.tag_add("var", start_pos, end_pos)
+                i = j + 2
+                continue
+        i += 1
 
     # 변수 스타일 설정
     base_font = tkfont.Font(font=widget.cget("font"))
