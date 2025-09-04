@@ -10,10 +10,7 @@ import tkinter.font as tkfont
 from i18n import tr
 from story_parser import Choice, Action, Branch, Chapter, Story
 
-# Match placeholders like ``__var__``.
-# Use a word boundary so text such as ``__text__var1__`` resolves ``var1`` first
-# instead of partially matching ``__text__``.
-VAR_PATTERN = re.compile(r"__([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)__\b")
+VAR_PATTERN = re.compile(r"__([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)__")
 
 
 @dataclass
@@ -453,13 +450,58 @@ class BranchingNovelApp(tk.Tk):
         if not text:
             return ""
 
+        # 현재 상태와 초기 변수 병합
         variables = {**self.story.variables, **self.state}
 
-        def repl(match: re.Match[str]) -> str:
-            name = match.group(1)
-            return str(variables.get(name, match.group(0)))
+        s = text
+        out_parts: List[str] = []
+        i = 0
+        n = len(s)
 
-        return VAR_PATTERN.sub(repl, text)
+        # 커스텀 스캐너: '__name__' 패턴을 직접 파싱
+        # 규칙:
+        #  - 올바른 플레이스홀더: '__' + [A-Za-z0-9]+(?:_[A-Za-z0-9]+)* + '__'
+        #  - 정의된 변수면 값을 치환하고 끝 인덱스까지 소비
+        #  - 미정의 변수면 '__name'까지만 출력하고, 뒤의 '__'는 소비하지 않아
+        #    다음 루프에서 새 토큰의 시작으로 재인식되게 함
+        while i < n:
+            j = s.find("__", i)
+            if j == -1:
+                out_parts.append(s[i:])
+                break
+
+            # 앞부분 그대로 출력
+            out_parts.append(s[i:j])
+
+            # '__' 다음에서 식별자 파싱 시도
+            k = j + 2
+            m = re.match(r"([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)", s[k:])
+            if not m:
+                # 식별자 없으면 '__' 자체를 리터럴로 취급
+                out_parts.append("__")
+                i = k
+                continue
+
+            name = m.group(1)
+            k += m.end()  # name 직후 위치
+
+            # 닫힘 '__' 확인
+            if k + 2 <= n and s.startswith("__", k):
+                if name in variables:
+                    # 정의된 변수: 값으로 치환하고 전체 토큰 소비
+                    out_parts.append(str(variables[name]))
+                    i = k + 2
+                else:
+                    # 미정의 변수: '__name'만 내보내고, 닫힘 '__'는 소비하지 않음
+                    # 다음 반복에서 그 '__'가 새로운 토큰 시작으로 사용될 수 있음
+                    out_parts.append(s[j:k])
+                    i = k
+            else:
+                # 닫힘 '__' 없으면 앞의 '__'는 리터럴
+                out_parts.append("__")
+                i = j + 2
+
+        return "".join(out_parts)
 
     def _evaluate_condition(self, cond: str) -> bool:
         expr = self._to_python_expr(cond)
