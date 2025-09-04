@@ -454,25 +454,23 @@ class BranchingNovelApp(tk.Tk):
         if not text:
             return ""
 
-        result = []
+        # Precompute variable names for quick matching.  We sort by length so that
+        # longer variable names take precedence when names share prefixes.
+        variables = {**self.story.variables, **self.state}
+        var_names = sorted(variables.keys(), key=len, reverse=True)
+
+        result: List[str] = []
         i = 0
         while i < len(text):
+            matched = False
             if text.startswith("__", i):
-                j = text.find("__", i + 2)
-                name = text[i + 2 : j] if j != -1 else ""
-                if j != -1 and name and re.fullmatch(r"[A-Za-z0-9_]+", name):
-                    token = f"__{name}__"
-                    if token in self.state:
-                        result.append(str(self.state[token]))
-                    elif token in self.story.variables:
-                        result.append(str(self.story.variables[token]))
-                    else:
-                        result.append(token)
-                    i = j + 2
-                    continue
-                result.append("__")
-                i += 2
-            else:
+                for name in var_names:
+                    if text.startswith(name, i):
+                        result.append(str(variables[name]))
+                        i += len(name)
+                        matched = True
+                        break
+            if not matched:
                 result.append(text[i])
                 i += 1
 
