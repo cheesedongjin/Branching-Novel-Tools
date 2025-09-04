@@ -198,6 +198,10 @@ class BranchingNovelApp(tk.Tk):
         self.bind("<Right>", self._go_next_chapter)
 
     def _populate_chapter_list(self):
+        if self._marquee_job:
+            self.after_cancel(self._marquee_job)
+            self._marquee_job = None
+        self._marquee_items = []
         # 리스트 업데이트 시 일시적으로 활성화
         self.chapter_list.configure(state="normal")
         self.chapter_list.delete(0, tk.END)
