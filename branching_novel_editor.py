@@ -2061,6 +2061,9 @@ class ChapterEditor(tk.Tk):
         errors: List[str] = []
         warnings: List[str] = []
 
+        def _line_info(line: int, src: str) -> str:
+            return f" (line {line}: {src})" if line else ""
+
         if not self.story.title.strip():
             errors.append(tr("story_title_empty"))
         if not self.story.start_id or self.story.start_id not in self.story.branches:
@@ -2069,16 +2072,19 @@ class ChapterEditor(tk.Tk):
         ids = set(self.story.branches.keys())
         for bid, br in self.story.branches.items():
             if not br.branch_id.strip():
-                errors.append(tr("branch_id_empty", id=bid))
+                errors.append(tr("branch_id_empty", id=bid) + _line_info(br.line, br.source))
             if br.branch_id != bid:
-                errors.append(tr("branch_id_mismatch", id=bid, branch_id=br.branch_id))
+                errors.append(tr("branch_id_mismatch", id=bid, branch_id=br.branch_id) + _line_info(br.line, br.source))
             for c in br.choices:
                 if c.target_id not in ids:
-                    warnings.append(tr("warn_choice_target_missing", id=bid, text=c.text, target=c.target_id))
+                    warnings.append(
+                        tr("warn_choice_target_missing", id=bid, text=c.text, target=c.target_id)
+                        + _line_info(c.line, c.source)
+                    )
 
         for cid, ch in self.story.chapters.items():
             if not ch.branches:
-                warnings.append(tr("warn_chapter_no_branches", id=cid))
+                warnings.append(tr("warn_chapter_no_branches", id=cid) + _line_info(ch.line, ch.source))
 
         # numeric-only operator vs non-numeric variable check
         var_types: Dict[str, Set[type]] = {}
@@ -2099,6 +2105,7 @@ class ChapterEditor(tk.Tk):
                             warned.add(key)
                             warnings.append(
                                 tr("warn_numeric_non_numeric", var=act.var, op=act.op)
+                                + _line_info(act.line, act.source)
                             )
 
         msg = []
