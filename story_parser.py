@@ -344,7 +344,7 @@ class StoryParser:
 
     def _ensure_valid_var(self, name: str) -> str:
         name = name.strip()
-        if not name or re.fullmatch(r"_+", name):
+        if not name or "__" in name or name.startswith("_") or name.endswith("_"):
             raise ParseError("Invalid variable name.")
         return name
 
