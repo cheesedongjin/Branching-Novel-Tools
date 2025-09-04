@@ -75,6 +75,8 @@ from story_parser import Choice, Action, Branch, Chapter, Story, ParseError, Sto
 APP_NAME = "Branching Novel GUI"
 INSTALLER_NAME = "BranchingNovelGUI-Online-Setup.exe"
 
+VAR_PATTERN = re.compile(r"__([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)__")
+
 
 @dataclass
 class Step:
@@ -454,32 +456,13 @@ class BranchingNovelApp(tk.Tk):
         if not text:
             return ""
 
-        # Variables can be embedded in text using ``__var__`` syntax.  We scan for
-        # that pattern and replace it with the current value.  This logic mirrors
-        # the editor's interpolation so both behave consistently.  Variable names
-        # themselves are stored without surrounding underscores, so only the
-        # inner portion of the placeholder is used for lookups.
         variables = {**self.story.variables, **self.state}
 
-        result: List[str] = []
-        i = 0
-        while i < len(text):
-            if text.startswith("__", i):
-                j = text.find("__", i + 2)
-                if j != -1:
-                    name = text[i + 2 : j]
-                    if name in variables:
-                        result.append(str(variables[name]))
-                        i = j + 2
-                        continue
-                # Unmatched opening ``__`` – treat as literal characters.
-                result.append("__")
-                i += 2
-            else:
-                result.append(text[i])
-                i += 1
+        def repl(match: re.Match[str]) -> str:
+            name = match.group(1)
+            return str(variables.get(name, match.group(0)))
 
-        return "".join(result)
+        return VAR_PATTERN.sub(repl, text)
 
     def _evaluate_condition(self, cond: str) -> bool:
         expr = self._to_python_expr(cond)
