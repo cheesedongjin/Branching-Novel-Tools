@@ -23,7 +23,7 @@ the current value of that variable.
 ## State actions
 Lines beginning with `!` inside a branch modify variables.
 Supported operations are:
-- `! <var> = <value>` – assignment.
+- `! <var> = <value>` – assignment. The value may be an expression such as `coins * 2` or `score + 5`.
 - `! <var> += <value>`, `-=`, `*=`, `/=`, `//=`, `%=` , `**=` – arithmetic updates.
 - `! set <var> = <value>` and `! add <var> += <value>` – alternative forms for
   assignment and addition.

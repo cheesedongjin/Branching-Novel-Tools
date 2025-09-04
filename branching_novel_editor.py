@@ -563,7 +563,7 @@ class Choice:
 
 @dataclass
 class Action:
-    op: str  # e.g. 'set', 'add', 'sub', 'mul', 'div', 'floordiv', 'mod', 'pow'
+    op: str  # e.g. 'set', 'add', 'sub', 'mul', 'div', 'floordiv', 'mod', 'pow', 'expr'
     var: str
     value: Union[int, float, bool, str]
 
@@ -661,18 +661,21 @@ class Story:
                     "pow": "**=",
                 }
                 for act in br.actions:
-                    if isinstance(act.value, bool):
-                        v = str(act.value).lower()
-                    elif isinstance(act.value, str):
-                        v = repr(act.value)
+                    if act.op == "expr":
+                        lines.append(f"! {act.var} = {act.value}")
                     else:
-                        v = act.value
-                    if act.op == "set":
-                        lines.append(f"! {act.var} = {v}")
-                    else:
-                        sym = op_map.get(act.op)
-                        if sym:
-                            lines.append(f"! {act.var} {sym} {v}")
+                        if isinstance(act.value, bool):
+                            v = str(act.value).lower()
+                        elif isinstance(act.value, str):
+                            v = repr(act.value)
+                        else:
+                            v = act.value
+                        if act.op == "set":
+                            lines.append(f"! {act.var} = {v}")
+                        else:
+                            sym = op_map.get(act.op)
+                            if sym:
+                                lines.append(f"! {act.var} {sym} {v}")
                 for c in br.choices:
                     if c.condition:
                         lines.append(f"* [{c.condition}] {c.text} -> {c.target_id}")
@@ -756,9 +759,15 @@ class StoryParser:
             if stripped.startswith("!"):
                 action = self._parse_action_line(stripped)
                 if current_branch is None:
-                    if action.op != "set":
+                    if action.op == "set":
+                        story.variables[action.var] = action.value
+                    elif action.op == "expr":
+                        try:
+                            story.variables[action.var] = eval(action.value, {}, dict(story.variables))
+                        except Exception:
+                            raise ParseError("Invalid expression for initial variable.")
+                    else:
                         raise ParseError("State change found outside of any branch.")
-                    story.variables[action.var] = action.value
                 else:
                     current_branch.actions.append(action)
                 continue
@@ -866,6 +875,12 @@ class StoryParser:
                 "%=": "mod",
                 "**=": "pow",
             }
+            if op == "=":
+                try:
+                    parsed = self._parse_value(val.strip())
+                    return Action(op="set", var=var.strip(), value=parsed)
+                except ParseError:
+                    return Action(op="expr", var=var.strip(), value=val.strip())
             return Action(op=op_map[op], var=var.strip(), value=self._parse_value(val.strip()))
         raise ParseError("Unknown action command.")
 
@@ -1246,6 +1261,12 @@ class BranchingNovelApp(tk.Tk):
                         val = int(val)
                 if act.op == "set":
                     state[act.var] = val
+                elif act.op == "expr":
+                    expr = self._to_python_expr(str(val))
+                    try:
+                        state[act.var] = eval(expr, {}, dict(state))
+                    except Exception:
+                        state[act.var] = 0
                 elif act.op == "add":
                     state[act.var] = cur + val
                 elif act.op == "sub":
