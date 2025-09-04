@@ -1678,7 +1678,6 @@ class ChoiceEditor(tk.Toplevel):
         highlight_variables(self.ent_text, lambda: self.variables)
         if hasattr(master, "register_var_drop_target"):
             master.register_var_drop_target(self.ent_text)
-        ttk.Button(frm, text="$", width=2, command=self.auto_text.trigger).grid(row=1, column=1, padx=(4,0))
 
         ttk.Label(frm, text=tr("target_branch_id")).grid(row=2, column=0, sticky="w")
         self.cmb_target = ttk.Combobox(frm, values=branch_ids, state="readonly", width=30)
@@ -1775,6 +1774,7 @@ class ChapterEditor(tk.Tk):
         self.dirty: bool = False
         self.preview_modified: bool = False
         self._drag_var_name: Optional[str] = None
+        self._drag_label: Optional[tk.Toplevel] = None
         self._var_drop_targets: set[tk.Widget] = set()
         self._preview_updating: bool = False
 
@@ -1859,7 +1859,6 @@ class ChapterEditor(tk.Tk):
         self.ent_end.insert(0, self.story.ending_text)
         self.ent_end.bind("<KeyRelease>", lambda e: self._on_ending_changed())
         self.auto_end = VarAutocomplete(self.ent_end, lambda: self._collect_variables())
-        ttk.Button(meta, text="$", width=2, command=self.auto_end.trigger).grid(row=2, column=2, padx=(4, 0))
         if hasattr(self, "register_var_drop_target"):
             self.register_var_drop_target(self.ent_end)
 
@@ -1954,7 +1953,6 @@ class ChapterEditor(tk.Tk):
         self.auto_ch_title = VarAutocomplete(self.ent_ch_title, lambda: self._collect_variables())
         highlight_variables(self.ent_ch_title, lambda: self._collect_variables())
         self.register_var_drop_target(self.ent_ch_title)
-        ttk.Button(edit_tab, text="$", width=2, command=self.auto_ch_title.trigger).grid(row=1, column=2, padx=(4, 0))
 
         ttk.Label(edit_tab, text=tr("branch_id")).grid(row=2, column=0, sticky="w")
         self.ent_br_id = ttk.Entry(edit_tab)
@@ -1971,7 +1969,6 @@ class ChapterEditor(tk.Tk):
         self.auto_br_title = VarAutocomplete(self.ent_br_title, lambda: self._collect_variables())
         highlight_variables(self.ent_br_title, lambda: self._collect_variables())
         self.register_var_drop_target(self.ent_br_title)
-        ttk.Button(edit_tab, text="$", width=2, command=self.auto_br_title.trigger).grid(row=3, column=2, padx=(4, 0))
 
         # 본문
         body_frame = ttk.LabelFrame(edit_tab, text=tr("body_label"), padding=6)
@@ -1990,7 +1987,6 @@ class ChapterEditor(tk.Tk):
         self.txt_body.bind("<KeyRelease>", lambda e: highlight_variables(self.txt_body, lambda: self._collect_variables()))
         highlight_variables(self.txt_body, lambda: self._collect_variables())
         self.register_var_drop_target(self.txt_body)
-        ttk.Button(body_frame, text="$", width=2, command=self.auto_body.trigger).grid(row=0, column=2, padx=(4, 0), sticky="ns")
         self.txt_body.bind("<<Modified>>", self._on_body_modified)
 
         # 선택지 편집
@@ -2067,10 +2063,16 @@ class ChapterEditor(tk.Tk):
         self._drag_var_name = self.tree_vars.item(item, "values")[0]
         self.bind_all("<Motion>", self._on_var_drag_motion)
         self.bind_all("<ButtonRelease-1>", self._on_var_drag_release)
+        self._drag_label = tk.Toplevel(self)
+        self._drag_label.overrideredirect(True)
+        ttk.Label(self._drag_label, text=self._drag_var_name).pack()
+        self._drag_label.geometry(f"+{event.x_root+10}+{event.y_root+10}")
 
     def _on_var_drag_motion(self, event):
         if not self._drag_var_name:
             return
+        if self._drag_label:
+            self._drag_label.geometry(f"+{event.x_root+10}+{event.y_root+10}")
         widget = self.winfo_containing(event.x_root, event.y_root)
         if widget in self._var_drop_targets:
             x = event.x_root - widget.winfo_rootx()
@@ -2106,6 +2108,9 @@ class ChapterEditor(tk.Tk):
                 widget.insert(idx, self._drag_var_name)
             widget.focus_force()
         self._drag_var_name = None
+        if self._drag_label:
+            self._drag_label.destroy()
+            self._drag_label = None
         self.unbind_all("<Motion>")
         self.unbind_all("<ButtonRelease-1>")
 
