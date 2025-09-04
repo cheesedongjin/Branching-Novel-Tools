@@ -34,6 +34,7 @@ import re
 import ast
 import argparse
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk, filedialog, messagebox
 
 from i18n import tr, set_language, set_language_from_file
@@ -543,7 +544,10 @@ def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) 
             widget.tag_add("var", start_pos, end_pos)
 
     # 변수 스타일 설정
-    widget.tag_configure("var", foreground="navy", font=("Consolas", 11, "bold"))
+    base_font = tkfont.Font(font=widget.cget("font"))
+    highlight_font = base_font.copy()
+    highlight_font.configure(weight="bold")
+    widget.tag_configure("var", foreground="navy", font=highlight_font)
 
 
 # ---------- 데이터 모델 ----------
