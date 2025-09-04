@@ -10,7 +10,10 @@ import tkinter.font as tkfont
 from i18n import tr
 from story_parser import Choice, Action, Branch, Chapter, Story
 
-VAR_PATTERN = re.compile(r"__([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)__")
+# Match placeholders like ``__var__``.
+# Use a word boundary so text such as ``__text__var1__`` resolves ``var1`` first
+# instead of partially matching ``__text__``.
+VAR_PATTERN = re.compile(r"__([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)__\b")
 
 
 @dataclass
