@@ -800,7 +800,7 @@ class VariableDialog(tk.Toplevel):
         if not name or not val_text:
             messagebox.showerror(tr("error"), tr("input_var_init_required"))
             return
-        if re.fullmatch(r"_+", name):
+        if "__" in name or name.startswith("_") or name.endswith("_"):
             messagebox.showerror(tr("error"), tr("invalid_variable_name"))
             return
         if val_text.lower() == "true":
@@ -824,9 +824,6 @@ class VariableDialog(tk.Toplevel):
                 except ValueError:
                     # Allow plain strings without quotes
                     val = val_text
-        if not (name.startswith("__") and name.endswith("__")):
-            core = name.strip("_")
-            name = f"__{core}__"
         self.var_name = name
         self.value = val
         self.result_ok = True
@@ -1747,11 +1744,10 @@ class ChapterEditor(tk.Tk):
         self._set_dirty(True)
 
     def _collect_variables(self) -> List[str]:
-        vars_set = {name for name in self.story.variables.keys() if name.startswith("__") and name.endswith("__")}
+        vars_set = set(self.story.variables.keys())
         for br in self.story.branches.values():
             for act in br.actions:
-                if act.var.startswith("__") and act.var.endswith("__"):
-                    vars_set.add(act.var)
+                vars_set.add(act.var)
         return sorted(vars_set)
 
     def _refresh_variable_list(self):
