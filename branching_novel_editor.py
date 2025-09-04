@@ -1282,8 +1282,8 @@ class VariableDialog(tk.Toplevel):
                 try:
                     val = float(val_text)
                 except ValueError:
-                    messagebox.showerror(tr("error"), tr("invalid_initial_value"))
-                    return
+                    # Allow plain strings without quotes
+                    val = val_text
         if not (name.startswith("__") and name.endswith("__")):
             core = name.strip("_")
             name = f"__{core}__"
