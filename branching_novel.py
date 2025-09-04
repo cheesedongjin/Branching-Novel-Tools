@@ -65,6 +65,7 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Union, Any
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+import tkinter.font as tkfont
 
 from i18n import tr, set_language, set_language_from_file
 
@@ -111,6 +112,10 @@ class BranchingNovelApp(tk.Tk):
         self.visited_chapters: List[str] = []
         self.chapter_positions: List[int] = []  # start index of each chapter
         self.chapter_page_index: int = -1
+        # data for scrolling long chapter titles
+        self._marquee_items: List[Dict[str, Any]] = []
+        self._marquee_job: Optional[str] = None
+        self._marquee_pause_cycles: int = 10
 
         self._build_ui()
         self._bind_events()
@@ -136,6 +141,8 @@ class BranchingNovelApp(tk.Tk):
         # 사용자 클릭/포커스 방지
         self.chapter_list.configure(state="disabled", takefocus=0)
         self._populate_chapter_list()
+        # start scrolling for long titles after widget rendered
+        self.after(100, self._setup_chapter_marquee)
 
         # 우측: 상단 네비게이션 바
         right_frame = ttk.Frame(self, padding=(8, 8, 8, 8))
@@ -200,6 +207,50 @@ class BranchingNovelApp(tk.Tk):
             item = f"{cid} | {title}" if title else cid
             self.chapter_list.insert(tk.END, item)
         self.chapter_list.configure(state="disabled")
+        # recompute marquee data when list changes
+        self.after(100, self._setup_chapter_marquee)
+
+    def _setup_chapter_marquee(self):
+        if self._marquee_job:
+            self.after_cancel(self._marquee_job)
+            self._marquee_job = None
+        width = self.chapter_list.winfo_width()
+        if width <= 1:
+            # widget not yet rendered; try again shortly
+            self._marquee_job = self.after(100, self._setup_chapter_marquee)
+            return
+        font = tkfont.nametofont(self.chapter_list.cget("font"))
+        self._marquee_items = []
+        for i in range(self.chapter_list.size()):
+            text = self.chapter_list.get(i)
+            if font.measure(text) > width:
+                self._marquee_items.append({"index": i, "text": text, "offset": 0, "pause": 0})
+        if self._marquee_items:
+            self._marquee_job = self.after(300, self._step_chapter_marquee)
+
+    def _step_chapter_marquee(self):
+        if not self._marquee_items:
+            self._marquee_job = None
+            return
+        sel = self.chapter_list.curselection()
+        self.chapter_list.configure(state="normal")
+        for item in self._marquee_items:
+            full = item["text"] + "   "
+            if item["pause"] > 0:
+                item["pause"] -= 1
+                continue
+            display = full[item["offset"]:] + full[: item["offset"]]
+            self.chapter_list.delete(item["index"])
+            self.chapter_list.insert(item["index"], display)
+            item["offset"] = (item["offset"] + 1) % len(full)
+            if item["offset"] == 0:
+                item["pause"] = self._marquee_pause_cycles
+        if sel:
+            self.chapter_list.selection_clear(0, tk.END)
+            self.chapter_list.selection_set(sel[0])
+            self.chapter_list.see(sel[0])
+        self.chapter_list.configure(state="disabled")
+        self._marquee_job = self.after(300, self._step_chapter_marquee)
 
     def _go_prev_chapter(self, event=None):
         if self.chapter_page_index > 0:
