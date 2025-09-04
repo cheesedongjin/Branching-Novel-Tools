@@ -276,7 +276,7 @@ class BranchingNovelApp(tk.Tk):
             if not br:
                 continue
             if br.paragraphs:
-                lines.append("\n".join(self._interpolate(p) for p in br.paragraphs))
+                lines.append("\n\n".join(self._interpolate(p) for p in br.paragraphs))
             if i + 1 < end and step.chosen_text:
                 lines.append(f"> {step.chosen_text}")
         text = "\n".join(lines)
