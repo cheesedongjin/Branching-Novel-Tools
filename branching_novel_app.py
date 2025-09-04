@@ -130,6 +130,13 @@ class BranchingNovelApp(tk.Tk):
     def _bind_events(self):
         self.bind("<Left>", self._go_prev_chapter)
         self.bind("<Right>", self._go_next_chapter)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_close(self):
+        if self._marquee_job:
+            self.after_cancel(self._marquee_job)
+            self._marquee_job = None
+        self.destroy()
 
     def _populate_chapter_list(self):
         if self._marquee_job:
