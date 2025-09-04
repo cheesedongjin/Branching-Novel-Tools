@@ -454,23 +454,25 @@ class BranchingNovelApp(tk.Tk):
         if not text:
             return ""
 
-        # Precompute variable names for quick matching.  We sort by length so that
-        # longer variable names take precedence when names share prefixes.
+        # Variables can be embedded in text using ``__var__`` syntax.  We scan for
+        # that pattern and replace it with the current value.  This logic mirrors
+        # the editor's interpolation so both behave consistently.
         variables = {**self.story.variables, **self.state}
-        var_names = sorted(variables.keys(), key=len, reverse=True)
 
         result: List[str] = []
         i = 0
         while i < len(text):
-            matched = False
             if text.startswith("__", i):
-                for name in var_names:
-                    if text.startswith(name, i):
-                        result.append(str(variables[name]))
-                        i += len(name)
-                        matched = True
-                        break
-            if not matched:
+                j = text.find("__", i + 2)
+                name = text[i + 2 : j] if j != -1 else ""
+                if j != -1 and name in variables:
+                    result.append(str(variables[name]))
+                    i = j + 2
+                    continue
+                # Unmatched opening ``__`` – treat as literal characters.
+                result.append("__")
+                i += 2
+            else:
                 result.append(text[i])
                 i += 1
 
