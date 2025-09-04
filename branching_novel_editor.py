@@ -544,7 +544,7 @@ def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) 
                 widget.tag_add("var", start_pos, end_pos)
                 i = j + 2
                 continue
-            i = j + 2 if j != -1 else i + 2
+            i += 1
         else:
             i += 1
 
