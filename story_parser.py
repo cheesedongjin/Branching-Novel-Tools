@@ -8,12 +8,16 @@ class Choice:
     text: str
     target_id: str
     condition: Optional[str] = None
+    line: int = 0
+    source: str = ""
 
 @dataclass
 class Action:
     op: str  # e.g. 'set', 'add', 'sub', 'mul', 'div', 'floordiv', 'mod', 'pow', 'expr'
     var: str
     value: Union[int, float, bool, str]
+    line: int = 0
+    source: str = ""
 
 @dataclass
 class Branch:
@@ -23,6 +27,8 @@ class Branch:
     paragraphs: List[str] = field(default_factory=list)
     choices: List[Choice] = field(default_factory=list)
     actions: List[Action] = field(default_factory=list)
+    line: int = 0
+    source: str = ""
 
 
 @dataclass
@@ -30,6 +36,8 @@ class Chapter:
     chapter_id: str
     title: str
     branches: Dict[str, Branch] = field(default_factory=dict)
+    line: int = 0
+    source: str = ""
 
 @dataclass
 class Story:
@@ -168,6 +176,7 @@ class StoryParser:
             raw = lines[i]
             line = raw.rstrip("\n")
             stripped = line.strip()
+            line_no = i + 1
             i += 1
 
             if stripped.startswith(("@title:", "@start:", "@ending:", "@show-disabled:")):
@@ -175,7 +184,7 @@ class StoryParser:
 
             if stripped.startswith("@chapter"):
                 current_branch = None
-                current_chapter = self._parse_chapter_decl(stripped)
+                current_chapter = self._parse_chapter_decl(stripped, line_no, line)
                 if current_chapter.chapter_id in story.chapters:
                     raise ParseError(f"Duplicate chapter id: {current_chapter.chapter_id}")
                 story.chapters[current_chapter.chapter_id] = current_chapter
@@ -188,7 +197,7 @@ class StoryParser:
                     merged = self._merge_paragraph_buffer(paragraph_buffer)
                     current_branch.paragraphs.extend(merged)
                     paragraph_buffer.clear()
-                current_branch = self._parse_branch_header(stripped, current_chapter.chapter_id)
+                current_branch = self._parse_branch_header(stripped, current_chapter.chapter_id, line_no, line)
                 if current_branch.branch_id in story.branches:
                     raise ParseError(f"Duplicate branch id: {current_branch.branch_id}")
                 story.branches[current_branch.branch_id] = current_branch
@@ -203,7 +212,7 @@ class StoryParser:
                 continue
 
             if stripped.startswith("!"):
-                action = self._parse_action_line(stripped)
+                action = self._parse_action_line(stripped, line_no, line)
                 if current_branch is None:
                     if action.op == "set":
                         story.variables[action.var] = action.value
@@ -221,7 +230,7 @@ class StoryParser:
             if stripped.startswith("* "):
                 if current_branch is None:
                     raise ParseError("Choice found outside of any branch.")
-                choice = self._parse_choice_line(stripped)
+                choice = self._parse_choice_line(stripped, line_no, line)
                 current_branch.choices.append(choice)
                 continue
 
@@ -257,23 +266,23 @@ class StoryParser:
             paragraphs.append("\n".join(current).strip())
         return paragraphs
 
-    def _parse_chapter_decl(self, line: str) -> Chapter:
+    def _parse_chapter_decl(self, line: str, line_no: int, source: str) -> Chapter:
         content = line[len("@chapter"):].strip()
         if ":" in content:
             cid, title = content.split(":", 1)
-            return Chapter(chapter_id=cid.strip(), title=title.strip())
-        return Chapter(chapter_id=content.strip(), title=content.strip())
+            return Chapter(chapter_id=cid.strip(), title=title.strip(), line=line_no, source=source)
+        return Chapter(chapter_id=content.strip(), title=content.strip(), line=line_no, source=source)
 
-    def _parse_branch_header(self, header_line: str, chapter_id: str) -> Branch:
+    def _parse_branch_header(self, header_line: str, chapter_id: str, line_no: int, source: str) -> Branch:
         content = header_line.lstrip("#").strip()
         if ":" in content:
             bid, title = content.split(":", 1)
-            return Branch(branch_id=bid.strip(), title=title.strip(), chapter_id=chapter_id)
+            return Branch(branch_id=bid.strip(), title=title.strip(), chapter_id=chapter_id, line=line_no, source=source)
         else:
             bid = content.strip()
-            return Branch(branch_id=bid, title=bid, chapter_id=chapter_id)
+            return Branch(branch_id=bid, title=bid, chapter_id=chapter_id, line=line_no, source=source)
 
-    def _parse_choice_line(self, line: str) -> Choice:
+    def _parse_choice_line(self, line: str, line_no: int, source: str) -> Choice:
         body = line[2:].strip()
         if "->" not in body:
             raise ParseError("Choice line must contain '->'.")
@@ -292,9 +301,9 @@ class StoryParser:
         target = right.strip()
         if not text or not target:
             raise ParseError("Choice text or target is empty.")
-        return Choice(text=text, target_id=target, condition=condition)
+        return Choice(text=text, target_id=target, condition=condition, line=line_no, source=source)
 
-    def _parse_action_line(self, line: str) -> Action:
+    def _parse_action_line(self, line: str, line_no: int, source: str) -> Action:
         content = line[1:].strip()
         if content.startswith("set "):
             rest = content[4:].strip()
@@ -302,14 +311,14 @@ class StoryParser:
                 raise ParseError("Invalid set syntax.")
             var, val = rest.split("=", 1)
             var = self._ensure_valid_var(var)
-            return Action(op="set", var=var, value=self._parse_value(val.strip()))
+            return Action(op="set", var=var, value=self._parse_value(val.strip()), line=line_no, source=source)
         if content.startswith("add "):
             rest = content[4:].strip()
             if "+=" not in rest:
                 raise ParseError("Invalid add syntax.")
             var, val = rest.split("+=", 1)
             var = self._ensure_valid_var(var)
-            return Action(op="add", var=var, value=self._parse_value(val.strip()))
+            return Action(op="add", var=var, value=self._parse_value(val.strip()), line=line_no, source=source)
         m = re.match(r"(\w+)\s*(=|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)", content)
         if m:
             var, op, val = m.groups()
@@ -327,10 +336,10 @@ class StoryParser:
             if op == "=":
                 try:
                     parsed = self._parse_value(val.strip())
-                    return Action(op="set", var=var, value=parsed)
+                    return Action(op="set", var=var, value=parsed, line=line_no, source=source)
                 except ParseError:
-                    return Action(op="expr", var=var, value=val.strip())
-            return Action(op=op_map[op], var=var, value=self._parse_value(val.strip()))
+                    return Action(op="expr", var=var, value=val.strip(), line=line_no, source=source)
+            return Action(op=op_map[op], var=var, value=self._parse_value(val.strip()), line=line_no, source=source)
         raise ParseError("Unknown action command.")
 
     def _ensure_valid_var(self, name: str) -> str:
