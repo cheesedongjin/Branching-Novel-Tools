@@ -526,25 +526,17 @@ def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) 
         widget.tag_remove("var", "1.0", tk.END)
     except tk.TclError:
         return
-
-    vars_list = sorted(get_vars(), key=len, reverse=True) if get_vars else []
-    if not vars_list:
+    vars_set = set(get_vars()) if get_vars else set()
+    if not vars_set:
         return
 
     text = widget.get("1.0", "end-1c")
-
-    idx = 0
-    length = len(text)
-    while idx < length:
-        for name in vars_list:
-            if text.startswith(name, idx):
-                start_pos = f"1.0+{idx}c"
-                end_pos = f"1.0+{idx + len(name)}c"
-                widget.tag_add("var", start_pos, end_pos)
-                idx += len(name)
-                break
-        else:
-            idx += 1
+    for m in re.finditer(r"__([A-Za-z0-9_]+)__", text):
+        token = m.group(0)
+        if token in vars_set:
+            start_pos = f"1.0+{m.start()}c"
+            end_pos = f"1.0+{m.end()}c"
+            widget.tag_add("var", start_pos, end_pos)
 
     # 변수 스타일 설정
     base_font = tkfont.Font(font=widget.cget("font"))
@@ -1286,21 +1278,17 @@ class BranchingNovelApp(tk.Tk):
     def _interpolate(self, text: str) -> str:
         if not text:
             return ""
-        vars_list = sorted(self.story.variables.keys(), key=len, reverse=True)
-        result: List[str] = []
-        idx = 0
-        length = len(text)
-        while idx < length:
-            for name in vars_list:
-                if text.startswith(name, idx):
-                    val = self.state.get(name, self.story.variables.get(name, ""))
-                    result.append(str(val))
-                    idx += len(name)
-                    break
-            else:
-                result.append(text[idx])
-                idx += 1
-        return "".join(result)
+        pattern = re.compile(r"__([A-Za-z0-9_]+)__")
+
+        def repl(m: re.Match[str]) -> str:
+            token = m.group(0)
+            if token in self.state:
+                return str(self.state[token])
+            if token in self.story.variables:
+                return str(self.story.variables[token])
+            return token
+
+        return pattern.sub(repl, text)
 
     def _evaluate_condition(self, cond: str) -> bool:
         expr = self._to_python_expr(cond)
@@ -1623,6 +1611,9 @@ class VariableDialog(tk.Toplevel):
                 except ValueError:
                     messagebox.showerror(tr("error"), tr("invalid_initial_value"))
                     return
+        if not (name.startswith("__") and name.endswith("__")):
+            core = name.strip("_")
+            name = f"__{core}__"
         self.var_name = name
         self.value = val
         self.result_ok = True
@@ -2548,10 +2539,11 @@ class ChapterEditor(tk.Tk):
         self._set_dirty(True)
 
     def _collect_variables(self) -> List[str]:
-        vars_set = set(self.story.variables.keys())
+        vars_set = {name for name in self.story.variables.keys() if name.startswith("__") and name.endswith("__")}
         for br in self.story.branches.values():
             for act in br.actions:
-                vars_set.add(act.var)
+                if act.var.startswith("__") and act.var.endswith("__"):
+                    vars_set.add(act.var)
         return sorted(vars_set)
 
     def _refresh_variable_list(self):
