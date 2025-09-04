@@ -2920,25 +2920,18 @@ class ChapterEditor(tk.Tk):
         has_critical = bool(errors or definite or witnessed)
         if auto:
             if has_critical:
-                if errors:
-                    messagebox.showwarning(tr("validation_result_title"), "\n".join(msg))
-                else:
-                    messagebox.showinfo(tr("validation_result_title"), "\n".join(msg))
+                self._show_validation_results(tr("validation_result_title"), msg)
                 if definite or witnessed:
                     self._show_loop_analysis(loop_lines)
             else:
                 return
         else:
             if errors or warnings or definite or witnessed or possible:
-                if errors:
-                    messagebox.showwarning(tr("validation_result_title"), "\n".join(msg))
-                else:
-                    messagebox.showinfo(tr("validation_result_title"), "\n".join(msg))
+                self._show_validation_results(tr("validation_result_title"), msg)
             else:
-                messagebox.showinfo(
-                    tr("validation_title"),
-                    tr("validation_ok") + "\n\n" + "\n".join(summary),
-                )
+                ok_lines = [tr("validation_ok"), ""]
+                ok_lines.extend(summary)
+                self._show_validation_results(tr("validation_title"), ok_lines)
             if definite or witnessed or possible:
                 self._show_loop_analysis(loop_lines)
 
@@ -3636,6 +3629,23 @@ class ChapterEditor(tk.Tk):
         if show_window:
             self._show_loop_analysis(lines)
         return lines, definite, witnessed, possible
+
+    def _show_validation_results(self, title: str, lines: List[str]) -> None:
+        win = tk.Toplevel(self)
+        win.title(title)
+        win.geometry("720x480")
+        frm = ttk.Frame(win, padding=8)
+        frm.pack(fill="both", expand=True)
+
+        txt = tk.Text(frm, wrap="word", font=("Consolas", 10))
+        txt.pack(side="left", fill="both", expand=True)
+        scr = ttk.Scrollbar(frm, orient="vertical", command=txt.yview)
+        scr.pack(side="right", fill="y")
+        txt.configure(yscrollcommand=scr.set)
+        txt.insert(tk.END, "\n".join(lines))
+        txt.configure(state="disabled")
+
+        ttk.Button(win, text=tr("close"), command=win.destroy).pack(pady=6)
 
     def _show_loop_analysis(self, lines: List[str]) -> None:
         win = tk.Toplevel(self)
