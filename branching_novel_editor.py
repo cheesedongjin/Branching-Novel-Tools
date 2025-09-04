@@ -2073,7 +2073,6 @@ class ChapterEditor(tk.Tk):
         left_btns = ttk.Frame(bottom)
         left_btns.pack(side="left")
         ttk.Button(left_btns, text=tr("validate_story"), command=self._validate_story).pack(side="left")
-        ttk.Button(left_btns, text=tr("analyze_loops"), command=self._analyze_infinite_loops).pack(side="left", padx=(6, 0))
         # 오른쪽: 저장/미리보기
         right_btns = ttk.Frame(bottom)
         right_btns.pack(side="right")
@@ -2803,12 +2802,12 @@ class ChapterEditor(tk.Tk):
         app = BranchingNovelApp(preview_story, file_path, show_disabled=self.story.show_disabled)
         app.mainloop()
 
-    def _validate_story(self):
+    def _validate_story(self, auto: bool = False):
         if not self._apply_preview_to_model():
             return
         self._apply_body_to_model()
-        errors = []
-        warnings = []
+        errors: List[str] = []
+        warnings: List[str] = []
 
         if not self.story.title.strip():
             errors.append(tr("story_title_empty"))
@@ -2860,10 +2859,36 @@ class ChapterEditor(tk.Tk):
             msg.append(tr("warnings_label"))
             msg.extend(f"- {w}" for w in warnings)
 
-        if not msg:
-            messagebox.showinfo(tr("validation_title"), tr("validation_ok"))
+        loop_lines, definite, witnessed, possible = self._analyze_infinite_loops(show_window=False)
+        summary = [loop_lines[0], loop_lines[2]]
+        if msg:
+            msg.append("")
+        msg.extend(summary)
+
+        has_critical = bool(errors or definite or witnessed)
+        if auto:
+            if has_critical:
+                if errors:
+                    messagebox.showwarning(tr("validation_result_title"), "\n".join(msg))
+                else:
+                    messagebox.showinfo(tr("validation_result_title"), "\n".join(msg))
+                if definite or witnessed:
+                    self._show_loop_analysis(loop_lines)
+            else:
+                return
         else:
-            messagebox.showwarning(tr("validation_result_title"), "\n".join(msg))
+            if errors or warnings or definite or witnessed or possible:
+                if errors:
+                    messagebox.showwarning(tr("validation_result_title"), "\n".join(msg))
+                else:
+                    messagebox.showinfo(tr("validation_result_title"), "\n".join(msg))
+            else:
+                messagebox.showinfo(
+                    tr("validation_title"),
+                    tr("validation_ok") + "\n\n" + "\n".join(summary),
+                )
+            if definite or witnessed or possible:
+                self._show_loop_analysis(loop_lines)
 
     # ---------- 파일 입출력 ----------
     def _new_story(self):
@@ -2924,6 +2949,7 @@ class ChapterEditor(tk.Tk):
         self._update_preview()
         self._set_dirty(False)
         self.title(f"Branching Novel Editor - {os.path.basename(path)}")
+        self._validate_story(auto=True)
 
     def _save_file(self):
         if self.current_file is None:
@@ -3013,28 +3039,27 @@ class ChapterEditor(tk.Tk):
         self.title(f"{base}{tail}{mark}")
 
     # ---------- 무한 루프 검사 ----------
-    def _analyze_infinite_loops(self):
+    def _analyze_infinite_loops(self, show_window: bool = True):
         """
         무한 루프 간단 리포트:
         - 강한 해석(가드 기반 고정점 + SCC + 경로 시뮬레이션)은 유지
         - 출력은 요약/조치 중심으로 간결화
         """
         import math
-        import tkinter as tk
-        from tkinter import ttk, messagebox
-
-        # 1) 모델 최신화
-        if not self._apply_preview_to_model():
-            return
-        self._apply_body_to_model()
 
         story = self.story
         branches = story.branches
         start_id = story.start_id
 
         if not start_id or start_id not in branches:
-            messagebox.showerror(tr("error"), tr("invalid_start"))
-            return
+            lines = [
+                tr("loop_summary_heading"),
+                "",
+                tr("loop_summary_counts", definite=0, witnessed=0, possible=0),
+            ]
+            if show_window:
+                self._show_loop_analysis(lines)
+            return lines, [], [], []
 
         # -----------------------
         # 공용 유틸
@@ -3556,8 +3581,11 @@ class ChapterEditor(tk.Tk):
         lines.append(tr("definition_definite"))
         lines.append(tr("definition_witnessed"))
         lines.append(tr("definition_possible"))
+        if show_window:
+            self._show_loop_analysis(lines)
+        return lines, definite, witnessed, possible
 
-        # 팝업 표시
+    def _show_loop_analysis(self, lines: List[str]) -> None:
         win = tk.Toplevel(self)
         win.title(tr("loop_analysis_title"))
         win.geometry("900x560")
