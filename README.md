@@ -1,4 +1,4 @@
-# Branching Novel Script Grammar
+# Branching Novel Script Syntax
 
 Branching Novel Script is a plain-text format for writing branching visual
 novels. Scripts usually use the `.bnov` extension and must be encoded in UTF-8.
@@ -82,12 +82,3 @@ You wake up with __coins__ coins.
 ```
 python branching_novel.py path/to/story.bnov
 ```
-
-## Language settings
-
-The editor and viewer have independent language settings. Edit
-`editor_language.txt` or `game_language.txt` to set the default language for
-each tool. You can also override the language at runtime by passing
-`--lang <code>` (for example, `en` or `ko`) when launching
-`branching_novel_editor.py` or `branching_novel.py`.
-
