@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import tkinter.font as tkfont
 
-from i18n import tr, set_language
+from i18n import tr, set_language, get_user_lang_file
 from story_parser import Choice, Action, Branch, Chapter, Story
 
 VAR_PATTERN = re.compile(r"__([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)__")
@@ -69,7 +69,7 @@ class BranchingNovelApp(tk.Tk):
 
     def _change_language(self, lang: str) -> None:
         set_language(lang)
-        lang_file = os.path.join(os.path.dirname(__file__), "game_language.txt")
+        lang_file = get_user_lang_file("game_language.txt")
         try:
             with open(lang_file, "w", encoding="utf-8") as f:
                 f.write(lang)

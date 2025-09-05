@@ -37,7 +37,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk, filedialog, messagebox
 
-from i18n import tr, set_language, set_language_from_file
+from i18n import tr, set_language, set_language_from_file, get_user_lang_file
 from typing import Any, List, Dict, Optional, Callable, Iterable, Tuple, Union, Set
 
 from auto_update import check_for_update
@@ -540,7 +540,7 @@ class ChapterEditor(tk.Tk):
 
     def _change_language(self, lang: str) -> None:
         set_language(lang)
-        lang_file = os.path.join(os.path.dirname(__file__), "editor_language.txt")
+        lang_file = get_user_lang_file("editor_language.txt")
         try:
             with open(lang_file, "w", encoding="utf-8") as f:
                 f.write(lang)
@@ -2322,7 +2322,7 @@ def main():
     if args.lang:
         set_language(args.lang)
     else:
-        lang_file = os.path.join(os.path.dirname(__file__), "editor_language.txt")
+        lang_file = get_user_lang_file("editor_language.txt")
         set_language_from_file(lang_file)
 
     app = ChapterEditor()
