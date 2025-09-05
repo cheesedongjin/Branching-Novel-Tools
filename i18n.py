@@ -2,12 +2,20 @@ import os
 
 _DEFAULT_LANG = 'en'
 _DEFAULT_LANG_FILE = os.path.join(os.path.dirname(__file__), 'language.txt')
+# 지원되는 언어 코드와 별칭 맵핑
+_LANG_ALIASES = {
+    'en': 'en',
+    'english': 'en',
+    'korean': 'korean',
+    'ko': 'korean',
+}
 
 
 def _load_lang_from_file(path: str) -> str:
     try:
         with open(path, encoding='utf-8') as f:
-            return f.read().strip() or _DEFAULT_LANG
+            lang = f.read().strip().lower()
+            return _LANG_ALIASES.get(lang, _DEFAULT_LANG)
     except OSError:
         return _DEFAULT_LANG
 

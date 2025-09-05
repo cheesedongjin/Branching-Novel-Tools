@@ -500,7 +500,7 @@ begin
     UpdateVersionFromExe(LogPath);
 
     if ActiveLanguage = 'korean' then
-      Lang := 'ko'
+      Lang := 'korean'
     else
       Lang := 'en';
 
