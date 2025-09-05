@@ -352,6 +352,29 @@ begin
   Result := WriteAndRunPS(Cmd, LogPath, 'expand_zip');
 end;
 
+procedure UpdateVersionFromExe(const LogPath: String);
+var
+  ExePath, Version, UninstKey: String;
+  RootKey: Integer;
+begin
+  ExePath := ExpandConstant('{app}\{#MyAppExe}');
+  if GetVersionNumbersString(ExePath, Version) then
+  begin
+    RegWriteStringValue(HKCU, 'Software\BranchingNovelTools\{#MyAppName}', 'Version', Version);
+
+    if IsAdminLoggedOn then
+      RootKey := HKLM
+    else
+      RootKey := HKCU;
+    UninstKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1';
+    RegWriteStringValue(RootKey, UninstKey, 'DisplayVersion', Version);
+
+    SafeAddToLog(LogPath, 'Version recorded: ' + Version);
+  end
+  else
+    SafeAddToLog(LogPath, 'Version detection failed for ' + ExePath);
+end;
+
 { SINGLE CurStepChanged: merge install-phase work and language-file writing }
 procedure CurStepChanged(CurStep: TSetupStep);
 var
@@ -359,9 +382,9 @@ var
   Ok: Boolean;
   Lang, Base: String;
 begin
+  LogPath := ExpandConstant('{app}\install.log');
   if CurStep = ssInstall then
   begin
-    LogPath := ExpandConstant('{app}\install.log');
 
     if not IsPSAvailable() then
     begin
@@ -407,6 +430,8 @@ begin
   end
   else if CurStep = ssPostInstall then
   begin
+    UpdateVersionFromExe(LogPath);
+
     if ActiveLanguage = 'korean' then
       Lang := 'ko'
     else
