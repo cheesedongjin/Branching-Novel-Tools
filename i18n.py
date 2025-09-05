@@ -171,6 +171,8 @@ _STRINGS = {
         'definition_definite': '- Definite: Each node can always move internally, and no external escape is possible in any state',
         'definition_witnessed': '- Witnessed: Repeatedly reached by following internal transitions with actual values',
         'definition_possible': '- Possible: There is a cycle, but external escape may open depending on conditions',
+        'language_menu': 'Language',
+        'language_change_restart': 'Language saved. Restart app to apply.',
         'close': 'Close',
     },
     'korean': {
@@ -320,6 +322,8 @@ _STRINGS = {
         'definition_definite': '- 확정: 각 노드에서 내부 이동이 항상 가능하고, 외부 탈출은 어떤 상태에서도 불가능',
         'definition_witnessed': '- 증거: 실제 값으로 내부만 따라가 반복 도달 확인',
         'definition_possible': '- 가능: 순환은 있으나 외부 탈출이 조건에 따라 열릴 수 있음',
+        'language_menu': '언어',
+        'language_change_restart': '언어가 저장되었습니다. 적용하려면 재시작하세요.',
         'close': '닫기',
     },
 }
