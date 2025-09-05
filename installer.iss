@@ -295,7 +295,8 @@ begin
     'Write-Log "STEP: Robocopy sync"; ' +
     '$robocopyPath = Join-Path $env:WINDIR "System32\\robocopy.exe"; ' +
     'if (-not (Test-Path -LiteralPath $robocopyPath)) { $robocopyPath = "robocopy.exe" } ' +
-    '$robolog = Join-Path $env:TEMP (''robocopy_'' + [guid]::NewGuid().ToString() + ''.log'); ' +
+    '/* FIXED QUOTES BELOW */ ' +
+    '$robolog = Join-Path $env:TEMP (''robocopy_'' + [guid]::NewGuid().ToString() + ''.log''); ' +
     '$args = @($tempLP, $targetLP, "/E","/R:2","/W:1","/NFL","/NDL","/NP","/NJH","/NJS","/COPY:DAT","/MIR","/LOG:" + $robolog); ' +
 
     'function Try-Robocopy{ ' +
