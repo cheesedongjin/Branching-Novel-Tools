@@ -9,17 +9,14 @@
 #ifndef MyAppName
   #define MyAppName "MyApp"
 #endif
-#ifndef MyAppVersion
-  #define MyAppVersion "0.0.0"
-#endif
 #ifndef MyAppExe
   #define MyAppExe "MyApp.exe"
 #endif
-#ifndef PayloadZipURL
-  #define PayloadZipURL "https://example.com/latest.zip"
+#ifndef GitHubRepo
+  #define GitHubRepo "cheesedongjin/Branching-Novel-Tools"
 #endif
-#ifndef PayloadShaURL
-  #define PayloadShaURL "https://example.com/latest.sha256"
+#ifndef ReleaseAssetPattern
+  #define ReleaseAssetPattern ""
 #endif
 #ifndef MyAppId
   #define MyAppId "{{B1C50C47-7B73-4308-9C74-2A9B3E11A9D3}}"
@@ -28,7 +25,7 @@
 [Setup]
 AppId={#MyAppId}
 AppName={#MyAppName}
-AppVersion={#MyAppVersion}
+AppVersion={code:GetAppVersion}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 Compression=lzma2
@@ -109,7 +106,7 @@ Root: HKCU; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; Value
 ; ----------
 ; 업데이트용: 버전 정보를 고정 경로(HKCU)에 저장
 ; ----------
-Root: HKCU; Subkey: "Software\BranchingNovelTools\{#MyAppName}"; ValueType: string; ValueName: "Version"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\BranchingNovelTools\{#MyAppName}"; ValueType: string; ValueName: "Version"; ValueData: "{code:GetAppVersion}"; Flags: uninsdeletekey
 
 [UninstallDelete]
 ; Remove all files and subfolders in app directory
@@ -119,6 +116,11 @@ Type: filesandordirs; Name: "{app}\*"
 Type: files; Name: "{app}\install.log"
 
 [Code]
+var
+  GLatestVersion: String;
+  GPayloadZipURL: String;
+  GPayloadShaURL: String;
+
 function IsPSAvailable(): Boolean;
 var
   ResultCode: Integer;
@@ -247,6 +249,56 @@ begin
   end;
 
   Result := True;
+end;
+
+function ResolveLatestRelease(const LogPath: String): Boolean;
+var
+  Cmd, OutPath, Content, Part: String;
+begin
+  if GPayloadZipURL <> '' then
+  begin
+    Result := True;
+    Exit;
+  end;
+  Result := False;
+  OutPath := ExpandConstant('{tmp}\\latest_release.txt');
+  Cmd :=
+    '$ErrorActionPreference = ''Stop''; ' +
+    '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ' +
+    '$resp = Invoke-WebRequest -Uri ' + PSQuote('https://api.github.com/repos/{#GitHubRepo}/releases/latest') + '; ' +
+    '$json = $resp.Content | ConvertFrom-Json; ' +
+    '$tag = $json.tag_name; ' +
+    '$ver = if($tag -and $tag.StartsWith("v")) { $tag.Substring(1) } else { $tag }; ' +
+    '$zip = $json.assets | Where-Object { $_.name -like ' + PSQuote('{#ReleaseAssetPattern}*.zip') + ' } | Select-Object -First 1; ' +
+    '$sha = $json.assets | Where-Object { $_.name -like ' + PSQuote('{#ReleaseAssetPattern}*.sha256') + ' } | Select-Object -First 1; ' +
+    '$out = @($ver, $zip.browser_download_url, $sha.browser_download_url) -join "|"; ' +
+    'Set-Content -LiteralPath ' + PSQuote(OutPath) + ' -Value $out -Encoding UTF8;';
+  if not WriteAndRunPS(Cmd, LogPath, 'github_latest') then
+    Exit;
+  if not LoadStringFromFile(OutPath, Content) then
+    Exit;
+  Part := Content;
+  if Pos('|', Part) = 0 then Exit;
+  GLatestVersion := Copy(Part, 1, Pos('|', Part) - 1);
+  Delete(Part, 1, Pos('|', Part));
+  if Pos('|', Part) = 0 then Exit;
+  GPayloadZipURL := Copy(Part, 1, Pos('|', Part) - 1);
+  Delete(Part, 1, Pos('|', Part));
+  GPayloadShaURL := Part;
+  Result := (GLatestVersion <> '') and (GPayloadZipURL <> '') and (GPayloadShaURL <> '');
+end;
+
+function EnsureLatest(const LogPath: String): Boolean;
+begin
+  Result := ResolveLatestRelease(LogPath);
+end;
+
+function GetAppVersion(Param: String): String;
+begin
+  if GLatestVersion = '' then
+    if not EnsureLatest(ExpandConstant('{tmp}\\latest.log')) then
+      GLatestVersion := '0.0.0';
+  Result := GLatestVersion;
 end;
 
 function DownloadAndVerify(const UrlZip, UrlSha, DestZip, DestSha, LogPath: String): Boolean;
@@ -406,7 +458,15 @@ begin
       WizardForm.ProgressGauge.Style := npbstNormal;
     end;
 
-    Ok := DownloadAndVerify('{#PayloadZipURL}', '{#PayloadShaURL}', ZipPath, ShaPath, LogPath);
+    if not EnsureLatest(LogPath) then
+    begin
+      WizardForm.ProgressGauge.Style := npbstNormal;
+      MsgBox('Failed to resolve latest release info. See install.log.', mbError, MB_OK);
+      WizardForm.Close;
+      Exit;
+    end;
+
+    Ok := DownloadAndVerify(GPayloadZipURL, GPayloadShaURL, ZipPath, ShaPath, LogPath);
     if not Ok then
     begin
       WizardForm.ProgressGauge.Style := npbstNormal;
