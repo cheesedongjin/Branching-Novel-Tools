@@ -278,6 +278,7 @@ begin
     '$ver = if($tag -and $tag.StartsWith("v")) { $tag.Substring(1) } else { $tag }; ' +
     '$zip = $json.assets | Where-Object { $_.name -like ' + PSQuote('{#ReleaseAssetPattern}*.zip') + ' } | Select-Object -First 1; ' +
     '$sha = $json.assets | Where-Object { $_.name -like ' + PSQuote('{#ReleaseAssetPattern}*.sha256') + ' } | Select-Object -First 1; ' +
+    'if (($null -eq $zip) -or ($null -eq $sha)) { throw ' + PSQuote('Release asset not found') + ' }; ' +
     '$out = @($ver, $zip.browser_download_url, $sha.browser_download_url) -join "|"; ' +
     'Set-Content -LiteralPath ' + PSQuote(OutPath) + ' -Value $out -Encoding UTF8;';
   if not WriteAndRunPS(Cmd, LogPath, 'github_latest') then
