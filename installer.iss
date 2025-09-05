@@ -233,51 +233,82 @@ function ExpandZipToApp(const ZipPath, TargetDir, LogPath: String): Boolean;
 var
   Cmd: String;
 begin
-  { 1) Extract to temp folder (.NET ZipFile)
-    2) Verify number of source files
-    3) Create target folder
-    4) Call robocopy with arguments
-    5) On failure, append tail of robocopy log to install.log
-    6) If robocopy fails, fallback copy via Copy-Item -Path (wildcard expand)
-    7) If no EXE in root, move one from subdirs to root
-    8) Verify final EXE exists }
+  { 1) 앱 프로세스 종료 (잠긴 DLL 해제)
+    2) Zip 임시해제 → 대상 폴더로 복사(robocopy 우선, 실패 시 폴백)
+    3) 재시도 로직 및 경로 길이/읽기전용 속성 대응
+    4) 최종 EXE 존재 확인/이동 }
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
     '$zip = ' + PSQuote(ZipPath) + '; ' +
     '$target = ' + PSQuote(TargetDir) + '; ' +
     '$temp = Join-Path $env:TEMP (''payload_'' + [guid]::NewGuid().ToString()); ' +
+
+    'function Write-Log($s){ try{ Add-Content -LiteralPath ' + PSQuote(LogPath) + ' -Value $s } catch{} } ' +
+
     'New-Item -ItemType Directory -Path $temp | Out-Null; ' +
     'Add-Type -AssemblyName System.IO.Compression.FileSystem; ' +
     '[System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $temp); ' +
     '$srcCount = (Get-ChildItem -LiteralPath $temp -Recurse -Force | Where-Object { -not $_.PSIsContainer }).Count; ' +
     'if ($srcCount -eq 0) { throw (''ZIP is empty after extract: '' + $zip) } ' +
+
+    '{ ' +
+    '  # 1) 실행 중인 앱 종료(잠금 해제). 이름은 필요 시 추가. ' +
+    '  $procs = @("BranchingNovelGUI","BranchingNovelEditor"); ' +
+    '  foreach($n in $procs){ ' +
+    '    try{ Get-Process -Name $n -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }catch{} ' +
+    '  } ' +
+    '  Start-Sleep -Milliseconds 400 ' +
+    '} ' +
+
     'if (-not (Test-Path -LiteralPath $target)) { New-Item -ItemType Directory -Path $target | Out-Null }; ' +
+
+    '{ ' +
+    '  # 2) 대상 폴더 읽기전용 속성 제거 (복사 방해 요소 제거) ' +
+    '  try{ attrib -R (Join-Path $target "*") /S }catch{} ' +
+    '} ' +
+
+    'function Add-LongPrefix([string]$p){ if($p -like "\\\\?\\*"){ return $p } else { return ("\\\\?\\" + $p) } } ' +
+    '$tempLP = Add-LongPrefix($temp); $targetLP = Add-LongPrefix($target); ' +
 
     '$robocopyPath = Join-Path $env:WINDIR "System32\\robocopy.exe"; ' +
     'if (-not (Test-Path -LiteralPath $robocopyPath)) { $robocopyPath = "robocopy.exe" } ' +
     '$robolog = Join-Path $env:TEMP (''robocopy_'' + [guid]::NewGuid().ToString() + ''.log''); ' +
-    '$args = @($temp, $target, "/E","/R:1","/W:1","/NFL","/NDL","/NP","/NJH","/NJS","/COPY:DAT", "/MIR", "/LOG:" + $robolog); ' +
-    '$p = Start-Process -FilePath $robocopyPath -ArgumentList $args -NoNewWindow -PassThru -Wait; ' +
-    '$code = $p.ExitCode; ' +
-    'if ($code -ge 8) { ' +
-    '  try { $tail = Get-Content -LiteralPath $robolog -Tail 80 -ErrorAction SilentlyContinue -Encoding UTF8; foreach ($line in $tail) { Write-Log("ROBOCOPY: " + $line) } } catch {} ' +
-    '  Write-Log("ROBOCOPY EXIT CODE: " + $code); ' +
-    '  Write-Log("ROBOCOPY LOG: " + $robolog); ' +
-    '  Write-Log("FALLBACK: Copy-Item -Recurse -Force (with wildcard expansion)"); ' +
-    '  Copy-Item -Path (Join-Path $temp ''*'') -Destination $target -Recurse -Force -ErrorAction Stop; ' +
+    '$args = @($tempLP, $targetLP, "/E","/R:2","/W:1","/NFL","/NDL","/NP","/NJH","/NJS","/COPY:DAT","/MIR","/LOG:" + $robolog); ' +
+
+    'function Try-Robocopy{ ' +
+    '  param([int]$attempts) ' +
+    '  for($i=1; $i -le $attempts; $i++){ ' +
+    '    $p = Start-Process -FilePath $robocopyPath -ArgumentList $args -NoNewWindow -PassThru -Wait; ' +
+    '    $code = $p.ExitCode; ' +
+    '    if($code -lt 8){ return $true } ' +
+    '    Write-Log ("ROBOCOPY EXIT CODE: " + $code + " (attempt " + $i + ")"); ' +
+    '    try{ $tail = Get-Content -LiteralPath $robolog -Tail 80 -Encoding UTF8 -ErrorAction SilentlyContinue; foreach($line in $tail){ Write-Log("ROBOCOPY: " + $line) } }catch{} ' +
+    '    Start-Sleep -Milliseconds (300 * $i) ' +
+    '  } ' +
+    '  return $false ' +
+    '} ' +
+
+    'if(-not (Try-Robocopy -attempts 3)){ ' +
+    '  Write-Log("FALLBACK: per-file Copy-Item with retries"); ' +
+    '  $items = Get-ChildItem -LiteralPath $temp -Recurse -File -Force; ' +
+    '  foreach($it in $items){ ' +
+    '    $rel = $it.FullName.Substring($temp.Length).TrimStart(''\\''); ' +
+    '    $dest = Join-Path $target $rel; ' +
+    '    $destDir = Split-Path -Parent $dest; if(-not (Test-Path -LiteralPath $destDir)){ New-Item -ItemType Directory -Path $destDir -Force | Out-Null } ' +
+    '    $ok=$false; for($r=1; $r -le 3 -and -not $ok; $r++){ ' +
+    '      try{ Copy-Item -LiteralPath (Add-LongPrefix($it.FullName)) -Destination (Add-LongPrefix($dest)) -Force -ErrorAction Stop; $ok=$true } ' +
+    '      catch{ Write-Log("COPY FAIL("+$r+"): " + $it.FullName + " -> " + $dest + " :: " + $_.Exception.Message); Start-Sleep -Milliseconds (250*$r) } ' +
+    '    } ' +
+    '    if(-not $ok){ throw ("Copy failed: " + $it.FullName) } ' +
+    '  } ' +
     '} ' +
 
     '$expectedExe = Join-Path $target ' + PSQuote('{#MyAppExe}') + '; ' +
     'if (-not (Test-Path -LiteralPath $expectedExe)) { ' +
     '  $found = Get-ChildItem -Path $target -Filter ' + PSQuote('{#MyAppExe}') + ' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1; ' +
-    '  if ($null -ne $found) { ' +
-    '    Move-Item -LiteralPath $found.FullName -Destination $expectedExe -Force; ' +
-    '  } ' +
+    '  if ($null -ne $found) { Move-Item -LiteralPath $found.FullName -Destination $expectedExe -Force } ' +
     '} ' +
-
-    'if (-not (Test-Path -LiteralPath $expectedExe)) { ' +
-    '  throw ("Expected exe not found: " + $expectedExe + ". Check ZIP root & folder structure.") ' +
-    '}';
+    'if (-not (Test-Path -LiteralPath $expectedExe)) { throw ("Expected exe not found: " + $expectedExe + ". Check ZIP root & structure.") }';
 
   Result := WriteAndRunPS(Cmd, LogPath, 'expand_zip');
 end;
