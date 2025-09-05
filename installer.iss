@@ -296,18 +296,20 @@ begin
     '$robocopyPath = Join-Path $env:WINDIR "System32\\robocopy.exe"; ' +
     'if (-not (Test-Path -LiteralPath $robocopyPath)) { $robocopyPath = "robocopy.exe" } ' +
     '$robolog = Join-Path $env:TEMP (''robocopy_'' + [guid]::NewGuid().ToString() + ''.log''); ' +
-    '$args = @($tempLP, $targetLP, "/E","/R:2","/W:1","/NFL","/NDL","/NP","/NJH","/NJS","/COPY:DAT","/MIR","/LOG:" + $robolog); ' +
+    '$argLine = "`"$tempLP`" `"$targetLP`" /E /R:2 /W:1 /NFL /NDL /NP /NJH /NJS /COPY:DAT /MIR /LOG:`"$robolog`""; ' +
 
     'function Try-Robocopy{ ' +
     '  param([int]$attempts) ' +
     '  for($i=1; $i -le $attempts; $i++){ ' +
-    '    $p = Start-Process -FilePath $robocopyPath -ArgumentList $args -NoNewWindow -PassThru -Wait; ' +
+    '    Write-Log("ROBOCOPY ARGLINE: " + $argLine); ' +
+    '    $p = Start-Process -FilePath $robocopyPath -ArgumentList $argLine -NoNewWindow -PassThru -Wait; ' +
     '    $code = $p.ExitCode; ' +
     '    if($code -lt 8){ Write-Log ("ROBOCOPY OK code=" + $code + " attempt=" + $i); return $true } ' +
     '    Write-Log ("ROBOCOPY EXIT CODE: " + $code + " (attempt " + $i + ")"); ' +
     '    try{ $tail = Get-Content -LiteralPath $robolog -Tail 80 -Encoding UTF8 -ErrorAction SilentlyContinue; foreach($line in $tail){ Write-Log("ROBOCOPY: " + $line) } }catch{} ' +
     '    Start-Sleep -Milliseconds (300 * $i) ' +
     '  } ' +
+    '  Write-Log("ROBOCOPY FAILED args=" + $argLine + " log=" + $robolog); ' +
     '  return $false ' +
     '} ' +
 
