@@ -524,6 +524,11 @@ class ChapterEditor(tk.Tk):
         em.add_command(label=tr("find_replace"), command=self._open_find_window, accelerator="Ctrl+F")
         m.add_cascade(label=tr("edit_menu"), menu=em)
 
+        lm = tk.Menu(m, tearoff=0)
+        lm.add_command(label="English / 영어", command=lambda: self._change_language("en"))
+        lm.add_command(label="한국어 / Korean", command=lambda: self._change_language("korean"))
+        m.add_cascade(label="Language / 언어", menu=lm)
+
         self.config(menu=m)
 
         self.bind_all("<Control-n>", lambda e: self._new_story())
@@ -532,6 +537,16 @@ class ChapterEditor(tk.Tk):
         self.bind_all("<Delete>", lambda e: self._delete_current_chapter())
         self.bind_all("<Control-Shift-A>", lambda e: self._add_chapter())
         self.bind_all("<Control-f>", lambda e: self._open_find_window())
+
+    def _change_language(self, lang: str) -> None:
+        set_language(lang)
+        lang_file = os.path.join(os.path.dirname(__file__), "editor_language.txt")
+        try:
+            with open(lang_file, "w", encoding="utf-8") as f:
+                f.write(lang)
+            messagebox.showinfo("Language / 언어", tr("language_change_restart"))
+        except OSError as e:
+            messagebox.showerror(tr("error"), str(e))
 
     def _build_ui(self):
         # 좌: 메타 + 챕터 리스트, 우: 챕터 편집 + 선택지 + 미리보기

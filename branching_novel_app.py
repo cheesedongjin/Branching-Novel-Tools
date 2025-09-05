@@ -1,4 +1,5 @@
 import sys
+import os
 import re
 import ast
 from dataclasses import dataclass
@@ -7,7 +8,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import tkinter.font as tkfont
 
-from i18n import tr
+from i18n import tr, set_language
 from story_parser import Choice, Action, Branch, Chapter, Story
 
 VAR_PATTERN = re.compile(r"__([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)__")
@@ -51,11 +52,30 @@ class BranchingNovelApp(tk.Tk):
         self._marquee_job: Optional[str] = None
         self._marquee_pause_cycles: int = 10
 
+        self._build_menu()
         self._build_ui()
         self._bind_events()
 
         # 시작 챕터로 이동
         self._reset_to_start()
+
+    def _build_menu(self) -> None:
+        m = tk.Menu(self)
+        lm = tk.Menu(m, tearoff=0)
+        lm.add_command(label="English / 영어", command=lambda: self._change_language("en"))
+        lm.add_command(label="한국어 / Korean", command=lambda: self._change_language("korean"))
+        m.add_cascade(label="Language / 언어", menu=lm)
+        self.config(menu=m)
+
+    def _change_language(self, lang: str) -> None:
+        set_language(lang)
+        lang_file = os.path.join(os.path.dirname(__file__), "game_language.txt")
+        try:
+            with open(lang_file, "w", encoding="utf-8") as f:
+                f.write(lang)
+            messagebox.showinfo("Language / 언어", tr("language_change_restart"))
+        except OSError as e:
+            messagebox.showerror(tr("error"), str(e))
 
     def _build_ui(self):
         # 전체 수직 레이아웃: 좌측 챕터 리스트, 우측 본문/선택/네비
