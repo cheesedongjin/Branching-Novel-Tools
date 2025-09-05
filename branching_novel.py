@@ -71,7 +71,7 @@ from branching_novel_app import BranchingNovelApp
 
 APP_NAME = "Branching Novel GUI"
 INSTALLER_NAME = "BranchingNovelGUI-Online-Setup.exe"
-APP_ID = "B1C50C47-7B73-4308-9C74-2A9B3E11A9D3"
+APP_ID = "0FD4DF37-F7B3-40B1-8715-9667977A8D51"
 
 
 def load_text_from_file(path: str) -> str:

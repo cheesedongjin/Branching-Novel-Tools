@@ -47,7 +47,7 @@ from branching_novel_app import BranchingNovelApp, VAR_PATTERN
 
 APP_NAME = "Branching Novel Editor"
 INSTALLER_NAME = "BranchingNovelEditor-Online-Setup.exe"
-APP_ID = "B1C50C47-7B73-4308-9C74-2A9B3E11A9D3"
+APP_ID = "667FEBC7-64DB-446E-97B5-E6886D5E4660"
 
 
 def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) -> None:
