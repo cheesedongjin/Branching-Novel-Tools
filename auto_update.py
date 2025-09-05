@@ -32,6 +32,19 @@ else:  # pragma: no cover - non-Windows
     winreg = None  # type: ignore[misc]
 
 
+def _normalize_app_id(app_id: str | None) -> str | None:
+    """Return AppId without braces (e.g., {GUID} -> GUID)."""
+    if not app_id:
+        return None
+    s = app_id.strip()
+    # strip one pair of leading/trailing braces if present
+    if s.startswith("{") and s.endswith("}"):
+        s = s[1:-1]
+    # 방어적으로 여분의 '}' 같은 오타도 정리
+    s = s.strip("{} \t")
+    return s or None
+
+
 def _ver_tuple(ver: str) -> tuple[int, ...]:
     parts = []
     for p in ver.strip().split("."):
@@ -68,7 +81,13 @@ def _get_val(key, name: str, default=None):
 
 
 def _scan_inno_uninstall_for_version(app_name: str, app_id: str | None) -> str:
-    """Scan Inno Setup uninstall locations for DisplayVersion."""
+    """Scan Inno Setup uninstall locations for DisplayVersion.
+
+    탐색 우선순위
+      1) {AppId}_is1 (정확히 일치)
+      2) <AppName> (DisplayName 정확히 일치)
+      3) (마지막 안전장치) 키 이름이 <AppName>_is1 인 경우
+    """
     if winreg is None:
         return "0"
 
@@ -79,11 +98,18 @@ def _scan_inno_uninstall_for_version(app_name: str, app_id: str | None) -> str:
     WOW64_64 = getattr(winreg, "KEY_WOW64_64KEY", 0)
     views = [winreg.KEY_READ, winreg.KEY_READ | WOW64_32, winreg.KEY_READ | WOW64_64]
 
-    # 1) Direct hit by AppId: <AppId>_is1
-    if app_id:
-        target = f"{app_id}_is1"
-        for hive in hives:
-            for access in views:
+    norm_app_id = _normalize_app_id(app_id)
+    # Inno는 일반적으로 {GUID}_is1 형태를 사용
+    candidates_by_id = []
+    if norm_app_id:
+        candidates_by_id.append("{" + norm_app_id + "}_is1")
+        # 혹시 모를 변종/오타 대응: GUID_is1 도 한 번 시도
+        candidates_by_id.append(norm_app_id + "_is1")
+
+    # 1) AppId 기반 정확 키 조회
+    for hive in hives:
+        for access in views:
+            for target in candidates_by_id:
                 k = _open_key(hive, UNINSTALL + "\\" + target, access)
                 if not k:
                     continue
@@ -94,21 +120,7 @@ def _scan_inno_uninstall_for_version(app_name: str, app_id: str | None) -> str:
                 finally:
                     winreg.CloseKey(k)
 
-    # 2) Direct hit by AppName: <AppName>_is1
-    target_by_name = f"{app_name}_is1"
-    for hive in hives:
-        for access in views:
-            k = _open_key(hive, UNINSTALL + "\\" + target_by_name, access)
-            if k:
-                try:
-                    v = _get_val(k, "DisplayVersion")
-                    if v:
-                        return str(v)
-                finally:
-                    winreg.CloseKey(k)
-
-    # 3) Enumerate all and match DisplayName
-    name_lower = app_name.lower()
+    # 2) DisplayName == app_name (정확 일치) 로 열거 조회
     for hive in hives:
         for access in views:
             base = _open_key(hive, UNINSTALL, access)
@@ -127,7 +139,7 @@ def _scan_inno_uninstall_for_version(app_name: str, app_id: str | None) -> str:
                         continue
                     try:
                         disp = _get_val(sub, "DisplayName", "")
-                        if isinstance(disp, str) and name_lower in disp.lower():
+                        if isinstance(disp, str) and disp.strip() == app_name.strip():
                             v = _get_val(sub, "DisplayVersion")
                             if v:
                                 return str(v)
@@ -136,6 +148,19 @@ def _scan_inno_uninstall_for_version(app_name: str, app_id: str | None) -> str:
             finally:
                 winreg.CloseKey(base)
 
+    # 3) (예외적) 키 이름이 <AppName>_is1 인 경우 직접 조회
+    target_by_name = f"{app_name}_is1"
+    for hive in hives:
+        for access in views:
+            k = _open_key(hive, UNINSTALL + "\\" + target_by_name, access)
+            if k:
+                try:
+                    v = _get_val(k, "DisplayVersion")
+                    if v:
+                        return str(v)
+                finally:
+                    winreg.CloseKey(k)
+
     return "0"
 
 
@@ -143,14 +168,14 @@ def _get_installed_version(app_name: str, app_id: str | None = None) -> str:
     """Return installed version.
 
     Priority:
-      1) HKCU\Software\BranchingNovelTools\<AppName>\Version (fixed key we write)
-      2) Inno Setup uninstall keys across HKCU/HKLM and 32/64-bit views
+      1) HKCU\Software\BranchingNovelTools\<AppName>\Version (고정 키)
+      2) Inno Setup uninstall (AppId 엄격 + DisplayName 정확 일치)
       3) "0"
     """
     if winreg is None:
         return "0"
 
-    # 1) Fixed key we control via Inno [Registry]
+    # 1) 우리가 [Registry]로 쓰는 고정 키가 최우선
     custom_key = rf"Software\BranchingNovelTools\{app_name}"
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, custom_key) as k:
@@ -160,7 +185,7 @@ def _get_installed_version(app_name: str, app_id: str | None = None) -> str:
     except OSError:
         pass
 
-    # 2) Fallback to uninstall scan
+    # 2) Inno Uninstall 쪽 스캔
     return _scan_inno_uninstall_for_version(app_name, app_id)
 
 
