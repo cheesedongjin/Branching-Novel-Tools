@@ -56,7 +56,7 @@ korean.AssociateBnov=.bnov 파일을 {#MyAppName}에 연결
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-#if InstallEditor
+#if InstallGame
 Name: "fileassoc"; Description: "{cm:AssociateBnov}"; Flags: checkedonce
 #endif
 
@@ -69,7 +69,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: deskto
 Filename: "{app}\{#MyAppExe}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [Registry]
-#if InstallEditor
+#if InstallGame
 ; ----------
 ; 파일 연결(ProgID) - 관리자 설치: HKCR/HKLM
 ; ----------
