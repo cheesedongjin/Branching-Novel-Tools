@@ -154,7 +154,7 @@ end;
 function WriteAndRunPS(const Cmd, LogPath, ScriptNameHint: String): Boolean;
 var
   ResultCode: Integer;
-  PSExe, PSArgs, ScriptPath, ScriptBody, EscapedCmd: String;
+  PSExe, PSArgs, ScriptPath, ScriptBody, EscapedCmd, TranscriptPath: String;
   StartOk: Boolean;
 begin
   Result := False;
@@ -168,24 +168,38 @@ begin
     PSExe := 'powershell.exe';
 
   ScriptPath := MakeTempScriptFile(ScriptNameHint);
+  TranscriptPath := ExpandConstant('{tmp}\ps_transcript_' + ScriptNameHint + '_' + IntToStr(Random(2147483647)) + '.txt');
   EscapedCmd := EscapeForSingleQuotes(Cmd);
 
   ScriptBody :=
     '$ErrorActionPreference = ''Stop'';' + #13#10 +
     '$Log = ' + PSQuote(LogPath) + ';' + #13#10 +
-    '$TmpLog = Join-Path $env:TEMP ("installer_' + ScriptNameHint + '_log.txt");' + #13#10 +
+    '$Transcript = ' + PSQuote(TranscriptPath) + ';' + #13#10 +
     'function Write-Log($s){' + #13#10 +
-    '  try { Add-Content -LiteralPath $Log -Value $s } catch { try { Add-Content -LiteralPath $TmpLog -Value $s } catch {} }' + #13#10 +
+    '  try { Add-Content -LiteralPath $Log -Value $s } catch {}' + #13#10 +
     '}' + #13#10 +
+    'Write-Log ("SCRIPT PATH: ' + EscapeForSingleQuotes(ScriptPath) + '");' + #13#10 +
+    'Write-Log ("SCRIPT BODY BEGIN >>>");' + #13#10 +
+    'Write-Log ' + PSQuote(Cmd) + ';' + #13#10 +
+    'Write-Log ("<<< SCRIPT BODY END");' + #13#10 +
     'try {' + #13#10 +
+    '  Start-Transcript -Path $Transcript -ErrorAction SilentlyContinue | Out-Null' + #13#10 +
     '  Write-Log ''CMD: ' + EscapedCmd + ''';' + #13#10 +
     '  ' + Cmd + #13#10 +
     '  Write-Log ''OK'';' + #13#10 +
     '} catch {' + #13#10 +
-    '  Write-Log (''ERROR: '' + $_.Exception.Message);' + #13#10 +
-    '  if ($_.InvocationInfo -ne $null) { Write-Log (''AT: '' + $_.InvocationInfo.PositionMessage) }' + #13#10 +
+    '  Write-Log (''ERROR: '' + $_.Exception.ToString());' + #13#10 +
+    '  if ($_.InvocationInfo -ne $null) {' + #13#10 +
+    '    Write-Log (''AT: '' + $_.InvocationInfo.PositionMessage)' + #13#10 +
+    '    Write-Log (''SCRIPTNAME: '' + $_.InvocationInfo.ScriptName)' + #13#10 +
+    '    Write-Log (''LINE: '' + $_.InvocationInfo.ScriptLineNumber)' + #13#10 +
+    '  }' + #13#10 +
+    '  Write-Log (''LASTEXITCODE: '' + $LASTEXITCODE)' + #13#10 +
     '  exit 1' + #13#10 +
-    '}';
+    '} finally {' + #13#10 +
+    '  try { Stop-Transcript | Out-Null } catch {}' + #13#10 +
+    '  try { if (Test-Path -LiteralPath $Transcript) { Write-Log (''TRANSCRIPT: '' + $Transcript) } } catch {}' + #13#10 +
+    '}' ;
 
   EnsureParentDirExists(ScriptPath);
   if not SaveStringToFile(ScriptPath, ScriptBody, False) then
@@ -206,6 +220,11 @@ begin
   if ResultCode <> 0 then
   begin
     SafeAddToLog(LogPath, 'PS EXIT CODE=' + IntToStr(ResultCode));
+    SafeAddToLog(LogPath, 'PS SCRIPT AT: ' + ScriptPath);
+    { 스크립트 전문도 저장(문제 재현에 유용) }
+    SafeAddToLog(LogPath, 'PS SCRIPT CONTENT BEGIN >>>');
+    SafeAddToLog(LogPath, ScriptBody);
+    SafeAddToLog(LogPath, '<<< PS SCRIPT CONTENT END');
     Exit;
   end;
 
@@ -233,10 +252,6 @@ function ExpandZipToApp(const ZipPath, TargetDir, LogPath: String): Boolean;
 var
   Cmd: String;
 begin
-  { 1) 앱 프로세스 종료 (잠긴 DLL 해제)
-    2) Zip 임시해제 → 대상 폴더로 복사(robocopy 우선, 실패 시 폴백)
-    3) 재시도 로직 및 경로 길이/읽기전용 속성 대응
-    4) 최종 EXE 존재 확인/이동 }
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
     '$zip = ' + PSQuote(ZipPath) + '; ' +
@@ -245,34 +260,37 @@ begin
 
     'function Write-Log($s){ try{ Add-Content -LiteralPath ' + PSQuote(LogPath) + ' -Value $s } catch{} } ' +
 
-    'New-Item -ItemType Directory -Path $temp | Out-Null; ' +
-    'Add-Type -AssemblyName System.IO.Compression.FileSystem; ' +
+    'Write-Log "STEP: Create temp dir"; ' +
+    'New-Item -ItemType Directory -Path $temp -Force | Out-Null; ' +
+
+    'Write-Log "STEP: Add-Type System.IO.Compression.FileSystem"; ' +
+    'try { Add-Type -AssemblyName System.IO.Compression.FileSystem } ' +
+    'catch { Write-Log ("ERROR Add-Type: " + $_.Exception.Message); throw } ' +
+
+    'Write-Log ("STEP: Extract " + $zip + " -> " + $temp); ' +
     '[System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $temp); ' +
     '$srcCount = (Get-ChildItem -LiteralPath $temp -Recurse -Force | Where-Object { -not $_.PSIsContainer }).Count; ' +
+    'Write-Log ("EXTRACTED FILES: " + $srcCount); ' +
     'if ($srcCount -eq 0) { throw (''ZIP is empty after extract: '' + $zip) } ' +
 
-    '{ ' +
-    '  # 1) 실행 중인 앱 종료(잠금 해제). 이름은 필요 시 추가. ' +
-    '  $procs = @("BranchingNovelGUI","BranchingNovelEditor"); ' +
-    '  foreach($n in $procs){ ' +
-    '    try{ Get-Process -Name $n -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }catch{} ' +
-    '  } ' +
-    '  Start-Sleep -Milliseconds 400 ' +
-    '} ' +
+    'Write-Log ("STEP: Ensure target exists -> " + $target); ' +
+    'if (-not (Test-Path -LiteralPath $target)) { New-Item -ItemType Directory -Path $target -Force | Out-Null }; ' +
 
-    'if (-not (Test-Path -LiteralPath $target)) { New-Item -ItemType Directory -Path $target | Out-Null }; ' +
+    'Write-Log "STEP: Kill running processes (GUI/Editor)"; ' +
+    '$procs = @("BranchingNovelGUI","BranchingNovelEditor"); ' +
+    'foreach($n in $procs){ try{ Get-Process -Name $n -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }catch{ Write-Log("WARN kill " + $n + ": " + $_.Exception.Message) } } ' +
+    'Start-Sleep -Milliseconds 400; ' +
 
-    '{ ' +
-    '  # 2) 대상 폴더 읽기전용 속성 제거 (복사 방해 요소 제거) ' +
-    '  try{ attrib -R (Join-Path $target "*") /S }catch{} ' +
-    '} ' +
+    'Write-Log "STEP: Clear readonly attributes"; ' +
+    'try{ attrib -R (Join-Path $target "*") /S }catch{ Write-Log("WARN attrib: " + $_.Exception.Message) } ' +
 
     'function Add-LongPrefix([string]$p){ if($p -like "\\\\?\\*"){ return $p } else { return ("\\\\?\\" + $p) } } ' +
     '$tempLP = Add-LongPrefix($temp); $targetLP = Add-LongPrefix($target); ' +
 
+    'Write-Log "STEP: Robocopy sync"; ' +
     '$robocopyPath = Join-Path $env:WINDIR "System32\\robocopy.exe"; ' +
     'if (-not (Test-Path -LiteralPath $robocopyPath)) { $robocopyPath = "robocopy.exe" } ' +
-    '$robolog = Join-Path $env:TEMP (''robocopy_'' + [guid]::NewGuid().ToString() + ''.log''); ' +
+    '$robolog = Join-Path $env:TEMP (''robocopy_'' + [guid]::NewGuid().ToString() + ''.log'); ' +
     '$args = @($tempLP, $targetLP, "/E","/R:2","/W:1","/NFL","/NDL","/NP","/NJH","/NJS","/COPY:DAT","/MIR","/LOG:" + $robolog); ' +
 
     'function Try-Robocopy{ ' +
@@ -280,7 +298,7 @@ begin
     '  for($i=1; $i -le $attempts; $i++){ ' +
     '    $p = Start-Process -FilePath $robocopyPath -ArgumentList $args -NoNewWindow -PassThru -Wait; ' +
     '    $code = $p.ExitCode; ' +
-    '    if($code -lt 8){ return $true } ' +
+    '    if($code -lt 8){ Write-Log ("ROBOCOPY OK code=" + $code + " attempt=" + $i); return $true } ' +
     '    Write-Log ("ROBOCOPY EXIT CODE: " + $code + " (attempt " + $i + ")"); ' +
     '    try{ $tail = Get-Content -LiteralPath $robolog -Tail 80 -Encoding UTF8 -ErrorAction SilentlyContinue; foreach($line in $tail){ Write-Log("ROBOCOPY: " + $line) } }catch{} ' +
     '    Start-Sleep -Milliseconds (300 * $i) ' +
@@ -289,7 +307,7 @@ begin
     '} ' +
 
     'if(-not (Try-Robocopy -attempts 3)){ ' +
-    '  Write-Log("FALLBACK: per-file Copy-Item with retries"); ' +
+    '  Write-Log("STEP: Fallback per-file Copy-Item with retries"); ' +
     '  $items = Get-ChildItem -LiteralPath $temp -Recurse -File -Force; ' +
     '  foreach($it in $items){ ' +
     '    $rel = $it.FullName.Substring($temp.Length).TrimStart(''\\''); ' +
@@ -303,12 +321,14 @@ begin
     '  } ' +
     '} ' +
 
+    'Write-Log "STEP: Ensure expected exe"; ' +
     '$expectedExe = Join-Path $target ' + PSQuote('{#MyAppExe}') + '; ' +
     'if (-not (Test-Path -LiteralPath $expectedExe)) { ' +
     '  $found = Get-ChildItem -Path $target -Filter ' + PSQuote('{#MyAppExe}') + ' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1; ' +
     '  if ($null -ne $found) { Move-Item -LiteralPath $found.FullName -Destination $expectedExe -Force } ' +
     '} ' +
-    'if (-not (Test-Path -LiteralPath $expectedExe)) { throw ("Expected exe not found: " + $expectedExe + ". Check ZIP root & structure.") }';
+    'if (-not (Test-Path -LiteralPath $expectedExe)) { throw ("Expected exe not found: " + $expectedExe + ". Check ZIP root & structure.") } ' +
+    'Write-Log "STEP: Done"; ';
 
   Result := WriteAndRunPS(Cmd, LogPath, 'expand_zip');
 end;
