@@ -281,9 +281,9 @@ begin
     'Write-Log ("STEP: Ensure target exists -> " + $target); ' +
     'if (-not (Test-Path -LiteralPath $target)) { New-Item -ItemType Directory -Path $target -Force | Out-Null }; ' +
 
-    'Write-Log "STEP: Kill running processes (GUI/Editor)"; ' +
-    '$procs = @("BranchingNovelGUI","BranchingNovelEditor"); ' +
-    'foreach($n in $procs){ try{ Get-Process -Name $n -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }catch{ Write-Log("WARN kill " + $n + ": " + $_.Exception.Message) } } ' +
+    'Write-Log "STEP: Kill running process"; ' +
+    '$proc = [System.IO.Path]::GetFileNameWithoutExtension(' + PSQuote('{#MyAppExe}') + '); ' +
+    'try{ Get-Process -Name $proc -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }catch{ Write-Log("WARN kill " + $proc + ": " + $_.Exception.Message) } ' +
     'Start-Sleep -Milliseconds 400; ' +
 
     'Write-Log "STEP: Clear readonly attributes"; ' +
