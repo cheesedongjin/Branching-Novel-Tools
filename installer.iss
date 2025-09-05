@@ -277,6 +277,7 @@ begin
     Exit;
   if not LoadStringFromFile(OutPath, Content) then
     Exit;
+  Content := Trim(Content);
   Part := Content;
   if Pos('|', Part) = 0 then Exit;
   GLatestVersion := Copy(Part, 1, Pos('|', Part) - 1);
@@ -284,7 +285,7 @@ begin
   if Pos('|', Part) = 0 then Exit;
   GPayloadZipURL := Copy(Part, 1, Pos('|', Part) - 1);
   Delete(Part, 1, Pos('|', Part));
-  GPayloadShaURL := Part;
+  GPayloadShaURL := Trim(Part);
   Result := (GLatestVersion <> '') and (GPayloadZipURL <> '') and (GPayloadShaURL <> '');
 end;
 
