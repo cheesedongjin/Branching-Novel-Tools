@@ -58,19 +58,19 @@ jobs:
         shell: pwsh
         continue-on-error: true
         run: |
-          if (Test-Path assets/icons/appicon.png) {
-            $code = @'
-          from PIL import Image
-          src = Image.open("assets/icons/appicon.png").convert("RGBA")
-          sizes = [(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)]
-          # 핵심: 원본 이미지를 그대로 저장하면서 sizes만 넘긴다.
-          src.save("assets/icons/app.ico", format="ICO", sizes=sizes)
-          '@
-            Set-Content gen_ico.py $code -Encoding UTF8
-            python gen_ico.py
-          } else {
-            echo "no PNG icon, skip"
-          }
+          $code = @'
+        from PIL import Image
+        import os
+        def make_icon(png, ico):
+            if os.path.exists(png):
+                src = Image.open(png).convert("RGBA")
+                sizes = [(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)]
+                src.save(ico, format="ICO", sizes=sizes)
+        make_icon("assets/icons/appicon.png", "assets/icons/app.ico")
+        make_icon("assets/icons/editoricon.png", "assets/icons/editor.ico")
+        '@
+          Set-Content gen_ico.py $code -Encoding UTF8
+          python gen_ico.py
 
       - name: Write version info files
         shell: pwsh
@@ -86,7 +86,7 @@ jobs:
         shell: pwsh
         run: |
           $iconArgs = @()
-          if (Test-Path 'assets/icons/app.ico') { $iconArgs += @('--icon','assets/icons/app.ico') }
+          if (Test-Path 'assets/icons/editor.ico') { $iconArgs += @('--icon','assets/icons/editor.ico') }
           pyinstaller --noconfirm --windowed --onedir --noupx --clean --version-file verinfo-editor.txt -n $env:EDITOR_APPNAME @iconArgs $env:EDITOR_ENTRY
           if (!(Test-Path "dist/$env:EDITOR_APPNAME")) { Write-Error "Editor dist missing"; exit 1 }
 
@@ -134,6 +134,13 @@ jobs:
           name: app-icon
           path: assets/icons/app.ico
 
+      - name: Upload editor icon artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-icon
+          path: assets/icons/editor.ico
+
   build-inno-installers:
     name: Build Windows Online Installers
     runs-on: windows-latest
@@ -164,21 +171,31 @@ jobs:
           name: app-icon
           path: assets/icons
 
+      - name: Download editor icon artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: editor-icon
+          path: assets/icons
+
       # 혹시 아티팩트가 없을 경우를 대비해 PNG→ICO 재생성도 시도(있으면 스킵)
       - name: Fallback - build icon from PNG if missing
         shell: pwsh
         continue-on-error: true
         run: |
-          if (!(Test-Path 'assets/icons/app.ico') -and (Test-Path 'assets/icons/appicon.png')) {
-            $code = @'
-          from PIL import Image
-          src = Image.open("assets/icons/appicon.png").convert("RGBA")
-          sizes = [(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)]
-          src.save("assets/icons/app.ico", format="ICO", sizes=sizes)
-          '@
-            Set-Content gen_ico.py $code -Encoding UTF8
-            python gen_ico.py
-          }
+          $code = @'
+        from PIL import Image
+        import os
+        def make_icon(png, ico):
+            if os.path.exists(png) and not os.path.exists(ico):
+                src = Image.open(png).convert("RGBA")
+                sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)]
+                src.save(ico, format="ICO", sizes=sizes)
+        make_icon("assets/icons/appicon.png", "assets/icons/app.ico")
+        make_icon("assets/icons/editoricon.png", "assets/icons/editor.ico")
+        '@
+          Set-Content gen_ico.py $code -Encoding UTF8
+          python gen_ico.py
 
       - name: Install Inno Setup
         shell: pwsh

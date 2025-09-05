@@ -462,6 +462,18 @@ class ChoiceEditor(tk.Toplevel):
 class ChapterEditor(tk.Tk):
     def __init__(self):
         super().__init__()
+        icon_path = os.path.join(
+            getattr(sys, "_MEIPASS", os.path.dirname(__file__)),
+            "assets",
+            "icons",
+            "editoricon.png",
+        )
+        if os.path.exists(icon_path):
+            try:
+                self.iconphoto(True, tk.PhotoImage(file=icon_path))
+            except tk.TclError:
+                pass
+
         self.title("Branching Novel Editor")
         self.geometry("1200x800")
         self.minsize(1000, 700)
