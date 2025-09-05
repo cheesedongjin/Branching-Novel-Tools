@@ -290,13 +290,12 @@ begin
     'try{ attrib -R (Join-Path $target "*") /S }catch{ Write-Log("WARN attrib: " + $_.Exception.Message) } ' +
 
     'function Add-LongPrefix([string]$p){ if($p -like "\\\\?\\*"){ return $p } else { return ("\\\\?\\" + $p) } } ' +
-    '$tempLP = Add-LongPrefix($temp); $targetLP = Add-LongPrefix($target); ' +
 
     'Write-Log "STEP: Robocopy sync"; ' +
     '$robocopyPath = Join-Path $env:WINDIR "System32\\robocopy.exe"; ' +
     'if (-not (Test-Path -LiteralPath $robocopyPath)) { $robocopyPath = "robocopy.exe" } ' +
     '$robolog = Join-Path $env:TEMP (''robocopy_'' + [guid]::NewGuid().ToString() + ''.log''); ' +
-    '$argLine = "`"$tempLP`" `"$targetLP`" /E /R:2 /W:1 /NFL /NDL /NP /NJH /NJS /COPY:DAT /MIR /LOG:`"$robolog`""; ' +
+    '$argLine = "`"$temp`" `"$target`" /E /R:2 /W:1 /NFL /NDL /NP /NJH /NJS /COPY:DAT /LOG:`"$robolog`""; ' +
 
     'function Try-Robocopy{ ' +
     '  param([int]$attempts) ' +
@@ -331,7 +330,7 @@ begin
     'Write-Log "STEP: Ensure expected exe"; ' +
     '$expectedExe = Join-Path $target ' + PSQuote('{#MyAppExe}') + '; ' +
     'if (-not (Test-Path -LiteralPath $expectedExe)) { ' +
-    '  $found = Get-ChildItem -Path $target -Filter ' + PSQuote('{#MyAppExe}') + ' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1; ' +
+    '  $found = Get-ChildItem -LiteralPath $target -Filter ' + PSQuote('{#MyAppExe}') + ' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1; ' +
     '  if ($null -ne $found) { Move-Item -LiteralPath $found.FullName -Destination $expectedExe -Force } ' +
     '} ' +
     'if (-not (Test-Path -LiteralPath $expectedExe)) { throw ("Expected exe not found: " + $expectedExe + ". Check ZIP root & structure.") } ' +
