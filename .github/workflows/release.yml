@@ -59,16 +59,16 @@ jobs:
         continue-on-error: true
         run: |
           $code = @'
-        from PIL import Image
-        import os
-        def make_icon(png, ico):
+          from PIL import Image
+          import os
+          def make_icon(png, ico):
             if os.path.exists(png):
-                src = Image.open(png).convert("RGBA")
-                sizes = [(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)]
-                src.save(ico, format="ICO", sizes=sizes)
-        make_icon("assets/icons/appicon.png", "assets/icons/app.ico")
-        make_icon("assets/icons/editoricon.png", "assets/icons/editor.ico")
-        '@
+              src = Image.open(png).convert("RGBA")
+              sizes = [(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)]
+              src.save(ico, format="ICO", sizes=sizes)
+          make_icon("assets/icons/appicon.png", "assets/icons/app.ico")
+          make_icon("assets/icons/editoricon.png", "assets/icons/editor.ico")
+          '@
           Set-Content gen_ico.py $code -Encoding UTF8
           python gen_ico.py
 
@@ -184,16 +184,16 @@ jobs:
         continue-on-error: true
         run: |
           $code = @'
-        from PIL import Image
-        import os
-        def make_icon(png, ico):
+          from PIL import Image
+          import os
+          def make_icon(png, ico):
             if os.path.exists(png) and not os.path.exists(ico):
-                src = Image.open(png).convert("RGBA")
-                sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)]
-                src.save(ico, format="ICO", sizes=sizes)
-        make_icon("assets/icons/appicon.png", "assets/icons/app.ico")
-        make_icon("assets/icons/editoricon.png", "assets/icons/editor.ico")
-        '@
+              src = Image.open(png).convert("RGBA")
+              sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)]
+              src.save(ico, format="ICO", sizes=sizes)
+          make_icon("assets/icons/appicon.png", "assets/icons/app.ico")
+          make_icon("assets/icons/editoricon.png", "assets/icons/editor.ico")
+          '@
           Set-Content gen_ico.py $code -Encoding UTF8
           python gen_ico.py
 
