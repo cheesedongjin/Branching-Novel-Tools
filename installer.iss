@@ -43,9 +43,13 @@ UsePreviousLanguage=no
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 
+[CustomMessages]
+english.AssociateBnov=Associate .bnov files with {#MyAppName}
+korean.AssociateBnov=.bnov 파일을 {#MyAppName}에 연결
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "fileassoc"; Description: "Associate .bnov files with {#MyAppName}"; Flags: checkedonce
+Name: "fileassoc"; Description: "{cm:AssociateBnov}"; Flags: checkedonce
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
