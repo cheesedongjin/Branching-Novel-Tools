@@ -82,3 +82,7 @@ You wake up with __coins__ coins.
 ```
 python branching_novel.py path/to/story.bnov
 ```
+
+## Building installers
+
+Use `editor_installer.iss` to build the editor installer and `game_installer.iss` for the game. Each wrapper defines its own payload and only writes the language file it needs, while sharing common logic from `installer.iss`.

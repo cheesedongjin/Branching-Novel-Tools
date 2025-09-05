@@ -185,13 +185,13 @@ jobs:
 
       - name: Compile Editor Installer
         shell: pwsh
-        if: ${{ hashFiles('release/latest-editor.zip') != '' && hashFiles('release/latest-editor.sha256') != '' && hashFiles('installer.iss') != '' }}
+        if: ${{ hashFiles('release/latest-editor.zip') != '' && hashFiles('release/latest-editor.sha256') != '' && hashFiles('editor_installer.iss') != '' }}
         run: |
           $ownerRepo = "${env:GITHUB_REPOSITORY}"
           $version='${{ steps.rtag.outputs.version }}'
           $zipURL = "https://github.com/$ownerRepo/releases/latest/download/latest-editor.zip"
           $shaURL = "https://github.com/$ownerRepo/releases/latest/download/latest-editor.sha256"
-          iscc /DMyAppName="${env:EDITOR_APPNAME}" /DMyAppVersion="$version" /DMyAppExe="${env:EDITOR_EXE}" /DPayloadZipURL="$zipURL" /DPayloadShaURL="$shaURL" installer.iss
+          iscc /DMyAppName="${env:EDITOR_APPNAME}" /DMyAppVersion="$version" /DMyAppExe="${env:EDITOR_EXE}" /DPayloadZipURL="$zipURL" /DPayloadShaURL="$shaURL" editor_installer.iss
           New-Item -ItemType Directory -Force -Path release | Out-Null
           $outExe=".\Output\${env:EDITOR_APPNAME}-Online-Setup.exe"
           if (!(Test-Path $outExe)) { Write-Error "Editor installer missing"; exit 1 }
@@ -199,13 +199,13 @@ jobs:
 
       - name: Compile Viewer Installer
         shell: pwsh
-        if: ${{ hashFiles('release/latest-viewer.zip') != '' && hashFiles('release/latest-viewer.sha256') != '' && hashFiles('installer.iss') != '' }}
+        if: ${{ hashFiles('release/latest-viewer.zip') != '' && hashFiles('release/latest-viewer.sha256') != '' && hashFiles('game_installer.iss') != '' }}
         run: |
           $ownerRepo = "${env:GITHUB_REPOSITORY}"
           $version='${{ steps.rtag.outputs.version }}'
           $zipURL = "https://github.com/$ownerRepo/releases/latest/download/latest-viewer.zip"
           $shaURL = "https://github.com/$ownerRepo/releases/latest/download/latest-viewer.sha256"
-          iscc /DMyAppName="${env:VIEWER_APPNAME}" /DMyAppVersion="$version" /DMyAppExe="${env:VIEWER_EXE}" /DPayloadZipURL="$zipURL" /DPayloadShaURL="$shaURL" installer.iss
+          iscc /DMyAppName="${env:VIEWER_APPNAME}" /DMyAppVersion="$version" /DMyAppExe="${env:VIEWER_EXE}" /DPayloadZipURL="$zipURL" /DPayloadShaURL="$shaURL" game_installer.iss
           $outExe=".\Output\${env:VIEWER_APPNAME}-Online-Setup.exe"
           if (!(Test-Path $outExe)) { Write-Error "Viewer installer missing"; exit 1 }
           Copy-Item $outExe "release/${env:VIEWER_APPNAME}-Online-Setup.exe" -Force
