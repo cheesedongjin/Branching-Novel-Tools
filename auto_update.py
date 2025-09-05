@@ -1,14 +1,4 @@
-"""Simple auto-update helper for Windows builds.
-
-This module checks the latest release on GitHub and, when a newer version is
-available, offers to download and run the installer. The repository is fixed
-in GITHUB_REPO but can be overridden by the environment variable GITHUB_REPO.
-The currently installed version is obtained primarily from a fixed registry
-key we write during install, and secondarily by scanning Inno Setup uninstall
-keys across HKCU/HKLM and 32/64-bit views.
-
-Pure-stdlib only to work inside PyInstaller executables.
-"""
+"""Simple auto-update helper for Windows builds."""
 
 from __future__ import annotations
 
@@ -22,8 +12,6 @@ from tkinter import messagebox
 
 from i18n import tr
 
-
-# Default repository; can be overridden by env var at runtime
 GITHUB_REPO = os.environ.get("GITHUB_REPO", "cheesedongjin/Branching-Novel-Tools")
 
 if platform.system() == "Windows":
@@ -40,33 +28,51 @@ def _normalize_app_id(app_id: str | None) -> str | None:
     # strip one pair of leading/trailing braces if present
     if s.startswith("{") and s.endswith("}"):
         s = s[1:-1]
-    # 방어적으로 여분의 '}' 같은 오타도 정리
+    # defensive cleanup for stray braces like '}}' from typos
     s = s.strip("{} \t")
     return s or None
 
 
+def _norm_name(s: str | None) -> str:
+    """Casefold + collapse whitespaces for tolerant comparisons."""
+    if not isinstance(s, str):
+        return ""
+    # remove all spaces and casefold
+    return "".join(s.split()).casefold()
+
+
 def _ver_tuple(ver: str) -> tuple[int, ...]:
+    """
+    Parse version like '1.2.3', '1.2.3-rc1', '1.2.3+meta' to a tuple of ints.
+    Non-digit suffixes per segment are ignored. Trailing zeros removed.
+    """
+    # Cut off build metadata or pre-release labels at first non [0-9.].
+    cleaned = []
+    seg = ""
+    for ch in ver.strip():
+        if ch.isdigit() or ch == ".":
+            seg += ch
+        else:
+            break
+    if not seg:
+        seg = "0"
+
     parts = []
-    for p in ver.strip().split("."):
-        # keep only leading integer portion of each segment
+    for p in seg.split("."):
         num = ""
         for ch in p:
             if ch.isdigit():
                 num += ch
             else:
                 break
-        if num:
-            parts.append(int(num))
-        else:
-            # if a segment has no leading digits, treat as 0
-            parts.append(0)
-    # remove trailing zeros to normalize
+        parts.append(int(num) if num else 0)
+
     while parts and parts[-1] == 0:
         parts.pop()
     return tuple(parts) if parts else (0,)
 
 
-def _open_key(root, path: str, access: int) -> object | None:
+def _open_key(root, path: str, access: int):
     try:
         return winreg.OpenKey(root, path, 0, access)
     except OSError:
@@ -81,12 +87,14 @@ def _get_val(key, name: str, default=None):
 
 
 def _scan_inno_uninstall_for_version(app_name: str, app_id: str | None) -> str:
-    """Scan Inno Setup uninstall locations for DisplayVersion.
+    """
+    Scan Inno Setup uninstall locations for DisplayVersion.
 
-    탐색 우선순위
-      1) {AppId}_is1 (정확히 일치)
-      2) <AppName> (DisplayName 정확히 일치)
-      3) (마지막 안전장치) 키 이름이 <AppName>_is1 인 경우
+    Priority
+      1) {AppId}_is1 (including brace-typo variants like {GUID}}_is1)
+      2) DisplayName equals app_name (tolerant compare)
+      3) Subkey name equals <AppName>_is1 (tolerant compare)
+      4) Any subkey whose name contains normalized AppId with braces stripped
     """
     if winreg is None:
         return "0"
@@ -99,28 +107,33 @@ def _scan_inno_uninstall_for_version(app_name: str, app_id: str | None) -> str:
     views = [winreg.KEY_READ, winreg.KEY_READ | WOW64_32, winreg.KEY_READ | WOW64_64]
 
     norm_app_id = _normalize_app_id(app_id)
-    # Inno는 일반적으로 {GUID}_is1 형태를 사용
-    candidates_by_id = []
+    tolerant_app_name = _norm_name(app_name)
+
+    def read_display_version(hive, access, subkey_name: str) -> str | None:
+        k = _open_key(hive, UNINSTALL + "\\" + subkey_name, access)
+        if not k:
+            return None
+        try:
+            v = _get_val(k, "DisplayVersion")
+            return str(v) if v else None
+        finally:
+            winreg.CloseKey(k)
+
+    # 1) Try AppId-oriented candidates, including brace-typo variants
     if norm_app_id:
-        candidates_by_id.append("{" + norm_app_id + "}_is1")
-        # 혹시 모를 변종/오타 대응: GUID_is1 도 한 번 시도
-        candidates_by_id.append(norm_app_id + "_is1")
-
-    # 1) AppId 기반 정확 키 조회
-    for hive in hives:
-        for access in views:
-            for target in candidates_by_id:
-                k = _open_key(hive, UNINSTALL + "\\" + target, access)
-                if not k:
-                    continue
-                try:
-                    v = _get_val(k, "DisplayVersion")
+        id_variants = [
+            "{" + norm_app_id + "}_is1",     # normal
+            norm_app_id + "_is1",            # plain
+            "{" + norm_app_id + "}}_is1",    # extra closing brace variant
+        ]
+        for hive in hives:
+            for access in views:
+                for target in id_variants:
+                    v = read_display_version(hive, access, target)
                     if v:
-                        return str(v)
-                finally:
-                    winreg.CloseKey(k)
+                        return v
 
-    # 2) DisplayName == app_name (정확 일치) 로 열거 조회
+    # 2) Enumerate and match by tolerant DisplayName
     for hive in hives:
         for access in views:
             base = _open_key(hive, UNINSTALL, access)
@@ -139,7 +152,7 @@ def _scan_inno_uninstall_for_version(app_name: str, app_id: str | None) -> str:
                         continue
                     try:
                         disp = _get_val(sub, "DisplayName", "")
-                        if isinstance(disp, str) and disp.strip() == app_name.strip():
+                        if _norm_name(disp) == tolerant_app_name:
                             v = _get_val(sub, "DisplayVersion")
                             if v:
                                 return str(v)
@@ -148,34 +161,52 @@ def _scan_inno_uninstall_for_version(app_name: str, app_id: str | None) -> str:
             finally:
                 winreg.CloseKey(base)
 
-    # 3) (예외적) 키 이름이 <AppName>_is1 인 경우 직접 조회
-    target_by_name = f"{app_name}_is1"
+    # 3) Subkey name equals <AppName>_is1 (tolerant compare)
+    candidate_by_name = f"{app_name}_is1"
     for hive in hives:
         for access in views:
-            k = _open_key(hive, UNINSTALL + "\\" + target_by_name, access)
-            if k:
+            v = read_display_version(hive, access, candidate_by_name)
+            if v:
+                return v
+
+    # 4) If AppId known, find any subkey whose name contains it (braces stripped)
+    if norm_app_id:
+        for hive in hives:
+            for access in views:
+                base = _open_key(hive, UNINSTALL, access)
+                if not base:
+                    continue
                 try:
-                    v = _get_val(k, "DisplayVersion")
-                    if v:
-                        return str(v)
+                    i = 0
+                    while True:
+                        try:
+                            subname = winreg.EnumKey(base, i)
+                            i += 1
+                        except OSError:
+                            break
+                        # strip all braces for comparison
+                        plain = subname.replace("{", "").replace("}", "")
+                        if norm_app_id in plain and subname.endswith("_is1"):
+                            v = read_display_version(hive, access, subname)
+                            if v:
+                                return v
                 finally:
-                    winreg.CloseKey(k)
+                    winreg.CloseKey(base)
 
     return "0"
 
 
 def _get_installed_version(app_name: str, app_id: str | None = None) -> str:
-    """Return installed version.
-
+    """
     Priority:
-      1) HKCU\Software\BranchingNovelTools\<AppName>\Version (고정 키)
-      2) Inno Setup uninstall (AppId 엄격 + DisplayName 정확 일치)
+      1) HKCU\\Software\\BranchingNovelTools\\<AppName>\\Version
+      2) Inno Setup uninstall (robust scan)
       3) "0"
     """
     if winreg is None:
         return "0"
 
-    # 1) 우리가 [Registry]로 쓰는 고정 키가 최우선
+    # 1) Fixed custom key we write at install time
     custom_key = rf"Software\BranchingNovelTools\{app_name}"
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, custom_key) as k:
@@ -185,16 +216,14 @@ def _get_installed_version(app_name: str, app_id: str | None = None) -> str:
     except OSError:
         pass
 
-    # 2) Inno Uninstall 쪽 스캔
+    # 2) Fallback to Inno uninstall scanning
     return _scan_inno_uninstall_for_version(app_name, app_id)
 
 
 def _github_api_json(url: str, timeout: float = 8.0) -> dict:
     req = urllib.request.Request(url)
-    # Add a UA to reduce likelihood of 403/blocked
     req.add_header("User-Agent", "BranchingNovelTools-Updater/1.0 (+Windows)")
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        # GitHub returns UTF-8 JSON
         data = resp.read()
     try:
         return json.loads(data.decode("utf-8"))
@@ -204,11 +233,9 @@ def _github_api_json(url: str, timeout: float = 8.0) -> dict:
 
 def _pick_asset_download_url(release: dict, installer_name: str) -> str | None:
     assets = release.get("assets") or []
-    # 1) Exact match
     for a in assets:
         if a.get("name") == installer_name:
             return a.get("browser_download_url")
-    # 2) Fallback: first .exe
     for a in assets:
         name = a.get("name") or ""
         if name.lower().endswith(".exe"):
@@ -223,20 +250,7 @@ def check_for_update(
     parent=None,
     app_id: str | None = None,
 ) -> None:
-    """Check GitHub for a newer release and optionally run the installer.
-
-    Parameters
-    ----------
-    app_name: str
-        Display name of the application (used for registry lookup and UI).
-    installer_name: str
-        Expected asset name of the installer in the GitHub release.
-    parent: tkinter widget, optional
-        Parent widget for message boxes.
-    app_id: str | None
-        Inno Setup AppId (without curly braces). If provided, improves accuracy
-        when scanning uninstall keys.
-    """
+    """Check GitHub for a newer release and optionally run the installer."""
     if platform.system() != "Windows":
         return
 
