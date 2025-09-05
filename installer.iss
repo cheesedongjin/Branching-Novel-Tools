@@ -253,7 +253,8 @@ end;
 
 function ResolveLatestRelease(const LogPath: String): Boolean;
 var
-  Cmd, OutPath, Content, Part: String;
+  Cmd, OutPath, Part: String;
+  ContentAnsi: AnsiString;
 begin
   if GPayloadZipURL <> '' then
   begin
@@ -275,10 +276,9 @@ begin
     'Set-Content -LiteralPath ' + PSQuote(OutPath) + ' -Value $out -Encoding UTF8;';
   if not WriteAndRunPS(Cmd, LogPath, 'github_latest') then
     Exit;
-  if not LoadStringFromFile(OutPath, Content) then
+  if not LoadStringFromFile(OutPath, ContentAnsi) then
     Exit;
-  Content := Trim(Content);
-  Part := Content;
+  Part := Trim(String(ContentAnsi));
   if Pos('|', Part) = 0 then Exit;
   GLatestVersion := Copy(Part, 1, Pos('|', Part) - 1);
   Delete(Part, 1, Pos('|', Part));
