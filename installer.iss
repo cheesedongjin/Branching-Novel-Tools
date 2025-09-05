@@ -28,8 +28,9 @@ ChangesAssociations=yes
 SolidCompression=yes
 OutputBaseFilename={#MyAppName}-Online-Setup
 WizardStyle=modern
-ArchitecturesInstallIn64BitMode=x64
-ArchitecturesAllowed=x64
+; Use the modern 64-bit identifier to avoid deprecation warnings.
+ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64compatible
 PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#MyAppExe}
 SetupLogging=yes
