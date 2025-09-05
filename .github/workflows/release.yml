@@ -16,11 +16,11 @@ env:
 
   # 앱 이름/엔트리(필요에 맞게 바꾸세요)
   EDITOR_APPNAME: "BranchingNovelEditor"
-  VIEWER_APPNAME: "BranchingNovelGUI"
+  GAME_APPNAME: "BranchingNovelGUI"
   EDITOR_ENTRY: "branching_novel_editor.py"
-  VIEWER_ENTRY: "branching_novel.py"
+  GAME_ENTRY: "branching_novel.py"
   EDITOR_EXE: "BranchingNovelEditor.exe"
-  VIEWER_EXE: "BranchingNovelGUI.exe"
+  GAME_EXE: "BranchingNovelGUI.exe"
 
 jobs:
   build-windows:
@@ -79,8 +79,8 @@ jobs:
           $fv=($ver.Split('.') + '0' + '0' + '0')[0..3] -join ','
           ((Get-Content 'version-file-template.txt') -replace 'APP_NAME', $env:EDITOR_APPNAME -replace 'APP_VERSION', $ver -replace 'FILE_VERSION_COMMAS', $fv) |
             Set-Content 'verinfo-editor.txt' -Encoding UTF8
-          ((Get-Content 'version-file-template.txt') -replace 'APP_NAME', $env:VIEWER_APPNAME -replace 'APP_VERSION', $ver -replace 'FILE_VERSION_COMMAS', $fv) |
-            Set-Content 'verinfo-viewer.txt' -Encoding UTF8
+          ((Get-Content 'version-file-template.txt') -replace 'APP_NAME', $env:GAME_APPNAME -replace 'APP_VERSION', $ver -replace 'FILE_VERSION_COMMAS', $fv) |
+            Set-Content 'verinfo-game.txt' -Encoding UTF8
 
       - name: Build Editor (folder mode)
         shell: pwsh
@@ -90,13 +90,13 @@ jobs:
           pyinstaller --noconfirm --windowed --onedir --noupx --clean --version-file verinfo-editor.txt -n $env:EDITOR_APPNAME @iconArgs $env:EDITOR_ENTRY
           if (!(Test-Path "dist/$env:EDITOR_APPNAME")) { Write-Error "Editor dist missing"; exit 1 }
 
-      - name: Build Viewer (folder mode)
+      - name: Build Game (folder mode)
         shell: pwsh
         run: |
           $iconArgs = @()
           if (Test-Path 'assets/icons/app.ico') { $iconArgs += @('--icon','assets/icons/app.ico') }
-          pyinstaller --noconfirm --windowed --onedir --noupx --clean --version-file verinfo-viewer.txt -n $env:VIEWER_APPNAME @iconArgs $env:VIEWER_ENTRY
-          if (!(Test-Path "dist/$env:VIEWER_APPNAME")) { Write-Error "Viewer dist missing"; exit 1 }
+          pyinstaller --noconfirm --windowed --onedir --noupx --clean --version-file verinfo-game.txt -n $env:GAME_APPNAME @iconArgs $env:GAME_ENTRY
+          if (!(Test-Path "dist/$env:GAME_APPNAME")) { Write-Error "Game dist missing"; exit 1 }
 
       - name: Package ZIPs + latest.* for online installers
         shell: pwsh
@@ -112,13 +112,14 @@ jobs:
           "$eh  latest-editor.zip" | Out-File -Encoding ascii "release/latest-editor.sha256"
           if (!(Test-Path "release/latest-editor.sha256")) { Write-Error "latest-editor.sha256 missing"; exit 1 }
 
-          $vzip = "release/${env:VIEWER_APPNAME}-$ver-windows-x64.zip"
-          Compress-Archive -Path "dist/${env:VIEWER_APPNAME}/*" -DestinationPath $vzip
-          if (!(Test-Path $vzip)) { Write-Error "Viewer zip missing"; exit 1 }
-          Copy-Item $vzip "release/latest-viewer.zip" -Force
-          $vh = (Get-FileHash "release/latest-viewer.zip" -Algorithm SHA256).Hash.ToLower()
-          "$vh  latest-viewer.zip" | Out-File -Encoding ascii "release/latest-viewer.sha256"
-          if (!(Test-Path "release/latest-viewer.sha256")) { Write-Error "latest-viewer.sha256 missing"; exit 1 }
+          $gzip = "release/game-$ver-windows-x64.zip"
+          Compress-Archive -Path "dist/${env:GAME_APPNAME}/*" -DestinationPath $gzip
+          if (!(Test-Path $gzip)) { Write-Error "Game zip missing"; exit 1 }
+          $gh = (Get-FileHash $gzip -Algorithm SHA256).Hash.ToLower()
+          "$gh  game-$ver-windows-x64.zip" | Out-File -Encoding ascii "release/game-$ver-windows-x64.sha256"
+          Copy-Item $gzip "release/latest-game.zip" -Force
+          "$gh  latest-game.zip" | Out-File -Encoding ascii "release/latest-game.sha256"
+          if (!(Test-Path "release/latest-game.sha256")) { Write-Error "latest-game.sha256 missing"; exit 1 }
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -199,18 +200,18 @@ jobs:
           if (!(Test-Path $outExe)) { Write-Error "Editor installer missing"; exit 1 }
           Copy-Item $outExe "release/${env:EDITOR_APPNAME}-Online-Setup.exe" -Force
 
-      - name: Compile Viewer Installer
+      - name: Compile Game Installer
         shell: pwsh
-        if: ${{ hashFiles('release/latest-viewer.zip') != '' && hashFiles('release/latest-viewer.sha256') != '' && hashFiles('game_installer.iss') != '' }}
+        if: ${{ hashFiles('release/latest-game.zip') != '' && hashFiles('release/latest-game.sha256') != '' && hashFiles('game_installer.iss') != '' }}
         run: |
           $ownerRepo = "${env:GITHUB_REPOSITORY}"
           $version='${{ steps.rtag.outputs.version }}'
-          $zipURL = "https://github.com/$ownerRepo/releases/latest/download/latest-viewer.zip"
-          $shaURL = "https://github.com/$ownerRepo/releases/latest/download/latest-viewer.sha256"
-          iscc /DMyAppName="${env:VIEWER_APPNAME}" /DMyAppVersion="$version" /DMyAppExe="${env:VIEWER_EXE}" /DPayloadZipURL="$zipURL" /DPayloadShaURL="$shaURL" game_installer.iss
-          $outExe=".\Output\${env:VIEWER_APPNAME}-Online-Setup.exe"
-          if (!(Test-Path $outExe)) { Write-Error "Viewer installer missing"; exit 1 }
-          Copy-Item $outExe "release/${env:VIEWER_APPNAME}-Online-Setup.exe" -Force
+          $zipURL = "https://github.com/$ownerRepo/releases/latest/download/latest-game.zip"
+          $shaURL = "https://github.com/$ownerRepo/releases/latest/download/latest-game.sha256"
+          iscc /DMyAppName="${env:GAME_APPNAME}" /DMyAppVersion="$version" /DMyAppExe="${env:GAME_EXE}" /DPayloadZipURL="$zipURL" /DPayloadShaURL="$shaURL" game_installer.iss
+          $outExe=".\Output\${env:GAME_APPNAME}-Online-Setup.exe"
+          if (!(Test-Path $outExe)) { Write-Error "Game installer missing"; exit 1 }
+          Copy-Item $outExe "release/${env:GAME_APPNAME}-Online-Setup.exe" -Force
 
       - name: Upload installers
         if: always()
@@ -252,11 +253,11 @@ jobs:
           v='${{ steps.rtag.outputs.version }}'
           mkdir -p release
           zip -j "release/${EDITOR_APPNAME}-${v}-macos.zip" "dist/${EDITOR_APPNAME}"
-      - name: Build Viewer
+      - name: Build Game
         run: |
-          pyinstaller -F --windowed -n "$VIEWER_APPNAME" "$VIEWER_ENTRY"
+          pyinstaller -F --windowed -n "$GAME_APPNAME" "$GAME_ENTRY"
           v='${{ steps.rtag.outputs.version }}'
-          zip -j "release/${VIEWER_APPNAME}-${v}-macos.zip" "dist/${VIEWER_APPNAME}"
+          zip -j "release/game-${v}-macos.zip" "dist/${GAME_APPNAME}"
       - name: Upload mac artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -298,11 +299,11 @@ jobs:
           v='${{ steps.rtag.outputs.version }}'
           mkdir -p release
           zip -j "release/branching-novel-editor-${v}-linux-x64.zip" "dist/branching-novel-editor"
-      - name: Build Viewer
+      - name: Build Game
         run: |
-          pyinstaller -F -n branching-novel-gui "$VIEWER_ENTRY"
+          pyinstaller -F -n branching-novel-gui "$GAME_ENTRY"
           v='${{ steps.rtag.outputs.version }}'
-          zip -j "release/branching-novel-gui-${v}-linux-x64.zip" "dist/branching-novel-gui"
+          zip -j "release/game-${v}-linux-x64.zip" "dist/branching-novel-gui"
       - name: Upload linux artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -352,16 +353,16 @@ jobs:
 
           ## Windows (installers)
           - Editor: `BranchingNovelEditor-Online-Setup.exe`
-          - Viewer: `BranchingNovelGUI-Online-Setup.exe`
+          - Game: `BranchingNovelGUI-Online-Setup.exe`
 
           ## Portable Zips
-          - Windows: `BranchingNovelEditor-__V__-windows-x64.zip`, `BranchingNovelGUI-__V__-windows-x64.zip`
-          - macOS:   `BranchingNovelEditor-__V__-macos.zip`, `BranchingNovelGUI-__V__-macos.zip`
-          - Linux:   `branching-novel-editor-__V__-linux-x64.zip`, `branching-novel-gui-__V__-linux-x64.zip`
+          - Windows: `BranchingNovelEditor-__V__-windows-x64.zip`, `game-__V__-windows-x64.zip`
+          - macOS:   `BranchingNovelEditor-__V__-macos.zip`, `game-__V__-macos.zip`
+          - Linux:   `branching-novel-editor-__V__-linux-x64.zip`, `game-__V__-linux-x64.zip`
 
           ## Online installers fetch from the latest release:
           - Editor: `releases/latest/download/latest-editor.zip` (+ `.sha256`)
-          - Viewer: `releases/latest/download/latest-viewer.zip` (+ `.sha256`)
+          - Game: `releases/latest/download/latest-game.zip` (+ `.sha256`)
 
           ## Checksums
           See `SHA256SUMS.txt`.
