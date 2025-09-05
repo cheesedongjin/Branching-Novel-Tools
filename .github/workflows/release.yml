@@ -183,6 +183,7 @@ jobs:
         shell: pwsh
         continue-on-error: true
         run: |
+          pip install pillow
           $code = @'
           from PIL import Image
           import os
