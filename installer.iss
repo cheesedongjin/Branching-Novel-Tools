@@ -1,5 +1,11 @@
 ; installer.iss - Online Bootstrap Installer
 
+#ifndef InstallEditor
+  #define InstallEditor 1
+#endif
+#ifndef InstallGame
+  #define InstallGame 1
+#endif
 #ifndef MyAppName
   #define MyAppName "MyApp"
 #endif
@@ -50,7 +56,9 @@ korean.AssociateBnov=.bnov 파일을 {#MyAppName}에 연결
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+#if InstallEditor
 Name: "fileassoc"; Description: "{cm:AssociateBnov}"; Flags: checkedonce
+#endif
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
@@ -61,6 +69,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: deskto
 Filename: "{app}\{#MyAppExe}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [Registry]
+#if InstallEditor
 ; ----------
 ; 파일 연결(ProgID) - 관리자 설치: HKCR/HKLM
 ; ----------
@@ -92,6 +101,7 @@ Root: HKCU; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueN
 Root: HKCU; Subkey: "Software\{#MyAppName}\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "{#MyAppName}"; Check: not IsAdminLoggedOn
 Root: HKCU; Subkey: "Software\{#MyAppName}\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "{#MyAppName} can open Branching Novel Script files (.bnov)"; Check: not IsAdminLoggedOn
 Root: HKCU; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".bnov"; ValueData: "BranchingNovelFile"; Check: not IsAdminLoggedOn
+#endif
 
 ; ----------
 ; 업데이트용: 버전 정보를 고정 경로(HKCU)에 저장
@@ -401,7 +411,11 @@ begin
 
     Base := ExpandConstant('{app}\');
     SaveStringToFile(Base + 'language.txt', Lang, False);
+#if InstallEditor
     SaveStringToFile(Base + 'editor_language.txt', Lang, False);
+#endif
+#if InstallGame
     SaveStringToFile(Base + 'game_language.txt', Lang, False);
+#endif
   end;
 end;
