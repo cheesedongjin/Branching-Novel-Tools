@@ -527,7 +527,7 @@ class ChapterEditor(tk.Tk):
         lm = tk.Menu(m, tearoff=0)
         lm.add_command(label="English / 영어", command=lambda: self._change_language("en"))
         lm.add_command(label="한국어 / Korean", command=lambda: self._change_language("korean"))
-        m.add_cascade(label=tr("language_menu"), menu=lm)
+        m.add_cascade(label="Language / 언어", menu=lm)
 
         self.config(menu=m)
 
@@ -544,7 +544,7 @@ class ChapterEditor(tk.Tk):
         try:
             with open(lang_file, "w", encoding="utf-8") as f:
                 f.write(lang)
-            messagebox.showinfo(tr("language_menu"), tr("language_change_restart"))
+            messagebox.showinfo("Language / 언어", tr("language_change_restart"))
         except OSError as e:
             messagebox.showerror(tr("error"), str(e))
 
