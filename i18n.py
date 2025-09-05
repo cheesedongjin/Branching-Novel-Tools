@@ -1,7 +1,15 @@
 import os
 
 _DEFAULT_LANG = 'en'
-_DEFAULT_LANG_FILE = os.path.join(os.path.dirname(__file__), 'language.txt')
+_LANG_DIR = os.path.join(os.path.expanduser('~'), '.branching_novel')
+
+
+def get_user_lang_file(name: str = 'language.txt') -> str:
+    os.makedirs(_LANG_DIR, exist_ok=True)
+    return os.path.join(_LANG_DIR, name)
+
+
+_DEFAULT_LANG_FILE = get_user_lang_file()
 # 지원되는 언어 코드와 별칭 맵핑
 _LANG_ALIASES = {
     'en': 'en',

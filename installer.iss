@@ -504,7 +504,8 @@ begin
     else
       Lang := 'en';
 
-    Base := ExpandConstant('{app}\');
+    Base := ExpandConstant('{userprofile}\.branching_novel\');
+    ForceDirectories(Base);
     SaveStringToFile(Base + 'language.txt', Lang, False);
 #if InstallEditor
     SaveStringToFile(Base + 'editor_language.txt', Lang, False);
