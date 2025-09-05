@@ -276,12 +276,9 @@ begin
     '$json = $resp.Content | ConvertFrom-Json; ' +
     '$tag = $json.tag_name; ' +
     '$ver = if($tag -and $tag.StartsWith("v")) { $tag.Substring(1) } else { $tag }; ' +
-    '$zip = $json.assets | Where-Object { $_.name -like ' + PSQuote('{#ReleaseAssetPattern}*.zip') + ' } | Select-Object -First 1; ' +
-    'if ($null -eq $zip) { throw ' + PSQuote('Zip asset not found') + ' }; ' +
-    '$shaName = $zip.name -replace ''\.zip$'', ''.sha256''; ' +
-    '$sha = $json.assets | Where-Object { $_.name -eq $shaName } | Select-Object -First 1; ' +
-    'if ($null -eq $sha) { throw ' + PSQuote('SHA asset not found') + ' }; ' +
-    '$out = @($ver, $zip.browser_download_url, $sha.browser_download_url) -join "|"; ' +
+    '$zip = ' + PSQuote('https://github.com/{#GitHubRepo}/releases/latest/download/latest-{#ReleaseAssetPattern}.zip') + '; ' +
+    '$sha = ' + PSQuote('https://github.com/{#GitHubRepo}/releases/latest/download/latest-{#ReleaseAssetPattern}.sha256') + '; ' +
+    '$out = @($ver, $zip, $sha) -join "|"; ' +
     'Set-Content -LiteralPath ' + PSQuote(OutPath) + ' -Value $out -Encoding ASCII;';
   if not WriteAndRunPS(Cmd, LogPath, 'github_latest') then
     Exit;
