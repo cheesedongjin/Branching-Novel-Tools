@@ -18,12 +18,18 @@
 #ifndef ReleaseAssetPattern
   #define ReleaseAssetPattern ""
 #endif
-#ifndef MyAppId
-  #define MyAppId "{{B1C50C47-7B73-4308-9C74-2A9B3E11A9D3}}"
+
+; ★ GUID는 맨몸(하이픈 포함, 중괄호 없음)으로만 정의
+#ifndef MyAppGuid
+  #define MyAppGuid "B1C50C47-7B73-4308-9C74-2A9B3E11A9D3"
 #endif
 
+; 파생: Setup용(이중중괄호), 코드/레지스트리용(단일중괄호)
+#define MyAppIdSetup "{{" + MyAppGuid + "}}"
+#define MyAppIdReg   "{"  + MyAppGuid + "}"
+
 [Setup]
-AppId={#MyAppId}
+AppId={#MyAppIdSetup}
 AppName={#MyAppName}
 AppVersion={code:GetAppVersion}
 DefaultDirName={autopf}\{#MyAppName}
@@ -419,7 +425,7 @@ begin
       RootKey := HKLM
     else
       RootKey := HKCU;
-    UninstKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#MyAppId}_is1';
+    UninstKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + '{#MyAppIdReg}' + '_is1';
     RegWriteStringValue(RootKey, UninstKey, 'DisplayVersion', Version);
 
     SafeAddToLog(LogPath, 'Version recorded: ' + Version);
