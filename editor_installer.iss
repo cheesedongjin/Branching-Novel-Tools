@@ -13,6 +13,9 @@
 #ifndef PayloadShaURL
 #define PayloadShaURL "https://example.com/editor_latest.sha256"
 #endif
+#ifndef MyAppId
+#define MyAppId "{{667FEBC7-64DB-446E-97B5-E6886D5E4660}}"
+#endif
 #define InstallEditor 1
 #define InstallGame 0
 #include "installer.iss"

@@ -21,9 +21,12 @@
 #ifndef PayloadShaURL
   #define PayloadShaURL "https://example.com/latest.sha256"
 #endif
+#ifndef MyAppId
+  #define MyAppId "{{B1C50C47-7B73-4308-9C74-2A9B3E11A9D3}}"
+#endif
 
 [Setup]
-AppId={{B1C50C47-7B73-4308-9C74-2A9B3E11A9D3}}
+AppId={#MyAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\{#MyAppName}
