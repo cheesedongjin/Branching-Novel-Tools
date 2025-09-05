@@ -72,15 +72,21 @@ jobs:
             echo "no PNG icon, skip"
           }
 
+      - name: Write version info files
+        shell: pwsh
+        run: |
+          $ver='${{ steps.rtag.outputs.version }}'
+          $fv=($ver.Split('.') + '0' + '0' + '0')[0..3] -join ','
+          ((Get-Content 'version-file-template.txt') -replace 'APP_NAME', $env:EDITOR_APPNAME -replace 'APP_VERSION', $ver -replace 'FILE_VERSION_COMMAS', $fv) |
+            Set-Content 'verinfo-editor.txt' -Encoding UTF8
+          ((Get-Content 'version-file-template.txt') -replace 'APP_NAME', $env:VIEWER_APPNAME -replace 'APP_VERSION', $ver -replace 'FILE_VERSION_COMMAS', $fv) |
+            Set-Content 'verinfo-viewer.txt' -Encoding UTF8
+
       - name: Build Editor (folder mode)
         shell: pwsh
         run: |
           $iconArgs = @()
           if (Test-Path 'assets/icons/app.ico') { $iconArgs += @('--icon','assets/icons/app.ico') }
-          $ver='${{ steps.rtag.outputs.version }}'
-          $fv=($ver.Split('.') + '0' + '0' + '0')[0..3] -join ','
-          ((Get-Content 'version-file-template.txt') -replace 'APP_NAME', $env:EDITOR_APPNAME -replace 'APP_VERSION', $ver -replace 'FILE_VERSION_COMMAS', $fv) |
-            Set-Content 'verinfo-editor.txt' -Encoding UTF8
           pyinstaller --noconfirm --windowed --onedir --noupx --clean --version-file verinfo-editor.txt -n $env:EDITOR_APPNAME @iconArgs $env:EDITOR_ENTRY
           if (!(Test-Path "dist/$env:EDITOR_APPNAME")) { Write-Error "Editor dist missing"; exit 1 }
 
@@ -89,10 +95,6 @@ jobs:
         run: |
           $iconArgs = @()
           if (Test-Path 'assets/icons/app.ico') { $iconArgs += @('--icon','assets/icons/app.ico') }
-          $ver='${{ steps.rtag.outputs.version }}'
-          $fv=($ver.Split('.') + '0' + '0' + '0')[0..3] -join ','
-          ((Get-Content 'version-file-template.txt') -replace 'APP_NAME', $env:VIEWER_APPNAME -replace 'APP_VERSION', $ver -replace 'FILE_VERSION_COMMAS', $fv) |
-            Set-Content 'verinfo-viewer.txt' -Encoding UTF8
           pyinstaller --noconfirm --windowed --onedir --noupx --clean --version-file verinfo-viewer.txt -n $env:VIEWER_APPNAME @iconArgs $env:VIEWER_ENTRY
           if (!(Test-Path "dist/$env:VIEWER_APPNAME")) { Write-Error "Viewer dist missing"; exit 1 }
 
