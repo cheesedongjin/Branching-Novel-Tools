@@ -47,6 +47,7 @@ from branching_novel_app import BranchingNovelApp, VAR_PATTERN
 
 APP_NAME = "Branching Novel Editor"
 INSTALLER_NAME = "BranchingNovelEditor-Online-Setup.exe"
+APP_ID = "B1C50C47-7B73-4308-9C74-2A9B3E11A9D3"
 
 
 def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) -> None:
@@ -2310,7 +2311,11 @@ def main():
         set_language_from_file(lang_file)
 
     app = ChapterEditor()
-    check_for_update(APP_NAME, INSTALLER_NAME, parent=app)
+    check_for_update(
+        app_name=APP_NAME,
+        installer_name=INSTALLER_NAME,
+        app_id=APP_ID,
+    )
     app.mainloop()
 
 if __name__ == "__main__":

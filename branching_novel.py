@@ -71,6 +71,7 @@ from branching_novel_app import BranchingNovelApp
 
 APP_NAME = "Branching Novel GUI"
 INSTALLER_NAME = "BranchingNovelGUI-Online-Setup.exe"
+APP_ID = "B1C50C47-7B73-4308-9C74-2A9B3E11A9D3"
 
 
 def load_text_from_file(path: str) -> str:
@@ -119,7 +120,11 @@ def main():
         sys.exit(1)
 
     app = BranchingNovelApp(story, file_path, show_disabled=story.show_disabled)
-    check_for_update(APP_NAME, INSTALLER_NAME, parent=app)
+    check_for_update(
+        app_name=APP_NAME,
+        installer_name=INSTALLER_NAME,
+        app_id=APP_ID,
+    )
     app.mainloop()
 
 

@@ -23,6 +23,8 @@ AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 Compression=lzma2
+CreateUninstallRegKey=yes
+ChangesAssociations=yes
 SolidCompression=yes
 OutputBaseFilename={#MyAppName}-Online-Setup
 WizardStyle=modern
@@ -43,6 +45,7 @@ Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "fileassoc"; Description: "Associate .bnov files with {#MyAppName}"; Flags: checkedonce
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
@@ -53,11 +56,42 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: deskto
 Filename: "{app}\{#MyAppExe}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [Registry]
-; Associate .bnov extension with {#MyAppExe}
-Root: HKCR; Subkey: ".bnov"; ValueType: string; ValueName: ""; ValueData: "BranchingNovelFile"; Flags: uninsdeletevalue
-Root: HKCR; Subkey: "BranchingNovelFile"; ValueType: string; ValueName: ""; ValueData: "Branching Novel Script"; Flags: uninsdeletekey
-Root: HKCR; Subkey: "BranchingNovelFile\DefaultIcon"; ValueType: string; ValueData: "{app}\{#MyAppExe},0"
-Root: HKCR; Subkey: "BranchingNovelFile\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExe}"" ""%1"""
+; ----------
+; 파일 연결(ProgID) - 관리자 설치: HKCR/HKLM
+; ----------
+Root: HKCR; Subkey: ".bnov"; ValueType: string; ValueName: ""; ValueData: "BranchingNovelFile"; Flags: uninsdeletevalue; Tasks: fileassoc; Check: IsAdminLoggedOn
+Root: HKCR; Subkey: "BranchingNovelFile"; ValueType: string; ValueName: ""; ValueData: "Branching Novel Script"; Flags: uninsdeletekey; Tasks: fileassoc; Check: IsAdminLoggedOn
+Root: HKCR; Subkey: "BranchingNovelFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExe},0"; Tasks: fileassoc; Check: IsAdminLoggedOn
+Root: HKCR; Subkey: "BranchingNovelFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExe}"" ""%1"""; Tasks: fileassoc; Check: IsAdminLoggedOn
+
+; ----------
+; 파일 연결(ProgID) - 사용자 설치: HKCU\Software\Classes
+; ----------
+Root: HKCU; Subkey: "Software\Classes\.bnov"; ValueType: string; ValueName: ""; ValueData: "BranchingNovelFile"; Flags: uninsdeletevalue; Tasks: fileassoc; Check: not IsAdminLoggedOn
+Root: HKCU; Subkey: "Software\Classes\BranchingNovelFile"; ValueType: string; ValueName: ""; ValueData: "Branching Novel Script"; Flags: uninsdeletekey; Tasks: fileassoc; Check: not IsAdminLoggedOn
+Root: HKCU; Subkey: "Software\Classes\BranchingNovelFile\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExe},0"; Tasks: fileassoc; Check: not IsAdminLoggedOn
+Root: HKCU; Subkey: "Software\Classes\BranchingNovelFile\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExe}"" ""%1"""; Tasks: fileassoc; Check: not IsAdminLoggedOn
+
+; ----------
+; 기본 앱 UI 노출(Capabilities) - 관리자 설치(HKLM)
+; ----------
+Root: HKLM; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: "Software\{#MyAppName}\Capabilities"; Flags: uninsdeletevalue; Check: IsAdminLoggedOn
+Root: HKLM; Subkey: "Software\{#MyAppName}\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "{#MyAppName}"; Check: IsAdminLoggedOn
+Root: HKLM; Subkey: "Software\{#MyAppName}\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "{#MyAppName} can open Branching Novel Script files (.bnov)"; Check: IsAdminLoggedOn
+Root: HKLM; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".bnov"; ValueData: "BranchingNovelFile"; Check: IsAdminLoggedOn
+
+; ----------
+; 기본 앱 UI 노출(Capabilities) - 사용자 설치(HKCU)
+; ----------
+Root: HKCU; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: "Software\{#MyAppName}\Capabilities"; Flags: uninsdeletevalue; Check: not IsAdminLoggedOn
+Root: HKCU; Subkey: "Software\{#MyAppName}\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "{#MyAppName}"; Check: not IsAdminLoggedOn
+Root: HKCU; Subkey: "Software\{#MyAppName}\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "{#MyAppName} can open Branching Novel Script files (.bnov)"; Check: not IsAdminLoggedOn
+Root: HKCU; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".bnov"; ValueData: "BranchingNovelFile"; Check: not IsAdminLoggedOn
+
+; ----------
+; 업데이트용: 버전 정보를 고정 경로(HKCU)에 저장
+; ----------
+Root: HKCU; Subkey: "Software\BranchingNovelTools\{#MyAppName}"; ValueType: string; ValueName: "Version"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletekey
 
 [UninstallDelete]
 ; Remove all files and subfolders in app directory
