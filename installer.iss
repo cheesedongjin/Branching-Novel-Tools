@@ -46,7 +46,7 @@ ArchitecturesAllowed=x64compatible
 PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#MyAppExe}
 SetupLogging=yes
-#if InstallEditor && not InstallGame
+#if (InstallEditor) && (!InstallGame)
   #ifexist "assets\icons\editor.ico"
   SetupIconFile=assets\icons\editor.ico
   #endif
