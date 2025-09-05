@@ -278,14 +278,14 @@ begin
     Exit;
   if not LoadStringFromFile(OutPath, ContentAnsi) then
     Exit;
-  Part := ContentAnsi;
+  Part := Trim(String(ContentAnsi));
   if Pos('|', Part) = 0 then Exit;
   GLatestVersion := Copy(Part, 1, Pos('|', Part) - 1);
   Delete(Part, 1, Pos('|', Part));
   if Pos('|', Part) = 0 then Exit;
   GPayloadZipURL := Copy(Part, 1, Pos('|', Part) - 1);
   Delete(Part, 1, Pos('|', Part));
-  GPayloadShaURL := Part;
+  GPayloadShaURL := Trim(Part);
   Result := (GLatestVersion <> '') and (GPayloadZipURL <> '') and (GPayloadShaURL <> '');
 end;
 
