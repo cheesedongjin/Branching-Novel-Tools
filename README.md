@@ -1,4 +1,15 @@
-# Branching Novel Script Syntax
+# Branching Novel Tools
+
+Branching Novel Tools is a lightweight toolkit for creating interactive stories
+that branch based on player choices. It pairs a simple `.bnov` text format with
+Python-based viewer and editor applications, letting writers draft and test
+visual novels without a complex build process. Key features include:
+
+- Plain-text scripts that work well with version control.
+- A reference viewer for playing stories locally.
+- Optional editor utilities for previewing and authoring narratives.
+
+## Branching Novel Script Syntax
 
 Branching Novel Script is a plain-text format for writing branching visual
 novels. Scripts usually use the `.bnov` extension and must be encoded in UTF-8.
