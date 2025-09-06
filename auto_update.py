@@ -8,7 +8,6 @@ import platform
 import subprocess
 import tempfile
 import urllib.request
-import uuid
 from tkinter import messagebox
 
 from i18n import tr
@@ -276,7 +275,7 @@ def check_for_update(
         if not asset_url:
             return
 
-        asset_url = f"{asset_url}?cb={uuid.uuid4()}"
+        asset_url = f"{asset_url}?cb={tag}"
 
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".exe")
         tmp.close()
