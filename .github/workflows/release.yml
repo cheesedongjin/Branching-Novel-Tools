@@ -271,16 +271,18 @@ jobs:
           v='${{ steps.rtag.outputs.version }}'
           mkdir -p release
           zip -j "release/${EDITOR_APPNAME}-${v}-macos.zip" "dist/${EDITOR_APPNAME}"
+          (cd release && shasum -a 256 "${EDITOR_APPNAME}-${v}-macos.zip" > "${EDITOR_APPNAME}-${v}-macos.zip.sha256")
       - name: Build Game
         run: |
           pyinstaller -F --windowed -n "$GAME_APPNAME" "$GAME_ENTRY"
           v='${{ steps.rtag.outputs.version }}'
           zip -j "release/game-${v}-macos.zip" "dist/${GAME_APPNAME}"
+          (cd release && shasum -a 256 "game-${v}-macos.zip" > "game-${v}-macos.zip.sha256")
       - name: Upload mac artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-artifacts
-          path: release/*.zip
+          path: release/*
 
   build-linux:
     name: Build Linux
@@ -317,16 +319,18 @@ jobs:
           v='${{ steps.rtag.outputs.version }}'
           mkdir -p release
           zip -j "release/branching-novel-editor-${v}-linux-x64.zip" "dist/branching-novel-editor"
+          (cd release && sha256sum "branching-novel-editor-${v}-linux-x64.zip" > "branching-novel-editor-${v}-linux-x64.zip.sha256")
       - name: Build Game
         run: |
           pyinstaller -F -n branching-novel-gui "$GAME_ENTRY"
           v='${{ steps.rtag.outputs.version }}'
           zip -j "release/game-${v}-linux-x64.zip" "dist/branching-novel-gui"
+          (cd release && sha256sum "game-${v}-linux-x64.zip" > "game-${v}-linux-x64.zip.sha256")
       - name: Upload linux artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-artifacts
-          path: release/*.zip
+          path: release/*
 
   release:
     name: Create GitHub Release
@@ -352,16 +356,6 @@ jobs:
           pattern: "*"
           merge-multiple: true
 
-      - name: Generate SHA256SUMS (if any zips)
-        run: |
-          cd release
-          if ls *.zip >/dev/null 2>&1; then
-            sha256sum *.zip > SHA256SUMS.txt
-          else
-            echo "No zip artifacts found." > SHA256SUMS.txt
-          fi
-          cd ..
-
       - name: Compose Release Notes
         shell: bash
         run: |
@@ -383,7 +377,7 @@ jobs:
           - Game: `releases/latest/download/latest-game.zip` (+ `.sha256`)
 
           ## Checksums
-          See `SHA256SUMS.txt`.
+          SHA256 checksums are provided alongside each download (`.sha256` files).
           EOF
           sed -i "s/__V__/${v}/g" RELEASE_BODY.md
 
@@ -397,7 +391,6 @@ jobs:
             release/*.zip
             release/*.sha256
             release/*Setup.exe
-            release/SHA256SUMS.txt
           make_latest: true
           draft: false
           prerelease: false
