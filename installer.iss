@@ -323,8 +323,8 @@ begin
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
     '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ' +
-    'Invoke-WebRequest -Uri (' + PSQuote(UrlZip) + ' + ' + PSQuote('?cb=') + ' + [Guid]::NewGuid().ToString()) -OutFile ' + PSQuote(DestZip) + '; ' +
-    'Invoke-WebRequest -Uri (' + PSQuote(UrlSha) + ' + ' + PSQuote('?cb=') + ' + [Guid]::NewGuid().ToString()) -OutFile ' + PSQuote(DestSha) + '; ' +
+    'Invoke-WebRequest -Uri (' + PSQuote(UrlZip) + ' + ' + PSQuote('?cb=') + ' + ' + PSQuote(GLatestVersion) + ') -OutFile ' + PSQuote(DestZip) + '; ' +
+    'Invoke-WebRequest -Uri (' + PSQuote(UrlSha) + ' + ' + PSQuote('?cb=') + ' + ' + PSQuote(GLatestVersion) + ') -OutFile ' + PSQuote(DestSha) + '; ' +
     '$expected = (Get-Content -LiteralPath ' + PSQuote(DestSha) + ' | Select-Object -First 1).Split('' '')[0]; ' +
     'if ([string]::IsNullOrWhiteSpace($expected)) { throw ''Empty SHA file'' } ' +
     '$actual = (Get-FileHash -LiteralPath ' + PSQuote(DestZip) + ' -Algorithm SHA256).Hash.ToLower(); ' +
