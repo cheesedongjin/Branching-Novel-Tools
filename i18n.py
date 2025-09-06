@@ -360,7 +360,7 @@ _STRINGS = {
         'definition_witnessed': '- 증거: 실제 값으로 내부만 따라가 반복 도달 확인',
         'definition_possible': '- 가능: 순환은 있으나 외부 탈출이 조건에 따라 열릴 수 있음',
         'language_change_restart': '언어가 저장되었습니다. 적용하려면 재시작하세요.',
-    'close': '닫기',
+        'close': '닫기',
     },
 }
 
