@@ -711,12 +711,27 @@ class BranchingNovelApp(tk.Tk):
         expr = self._to_python_expr(cond)
 
         try:
-            # 순수 표현식으로 파싱
-            tree = ast.parse(expr, mode="eval")  # Expression 노드
+            # 우선 순수 표현식으로 파싱
+            tree = ast.parse(expr, mode="eval")
             result = self._eval_ast(tree)
             return bool(result)
+        except SyntaxError:
+            # 대입식 등을 포함한 복합식 처리
+            seq_expr = re.sub(r"\band\b", "\n", expr)
+            try:
+                tree = ast.parse(seq_expr, mode="exec")
+            except Exception:
+                return False
+            for stmt in tree.body:
+                val = self._eval_ast(stmt)
+                # 대입식만 있는 경우 항상 통과
+                if isinstance(stmt, (ast.Assign, ast.AugAssign)):
+                    continue
+                if not bool(val):
+                    return False
+            return True
         except Exception:
-            # 어떤 이유로든 실패하면 False
+            # 기타 실패는 False
             return False
 
     def _eval_ast(self, node: ast.AST) -> Any:
