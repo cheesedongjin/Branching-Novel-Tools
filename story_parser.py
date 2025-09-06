@@ -157,6 +157,8 @@ class StoryParser:
         # 메타데이터 처리
         for raw in lines:
             line = raw.strip()
+            if line.startswith(";"):
+                continue
             if line.startswith("@title:"):
                 story.title = line[len("@title:"):].strip() or "Untitled"
                 continue
@@ -178,6 +180,9 @@ class StoryParser:
             stripped = line.strip()
             line_no = i + 1
             i += 1
+
+            if stripped.startswith(";"):
+                continue
 
             if stripped.startswith(("@title:", "@start:", "@ending:", "@show-disabled:")):
                 continue

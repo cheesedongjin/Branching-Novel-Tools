@@ -58,47 +58,56 @@ def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) 
     """
     try:
         widget.tag_remove("var", "1.0", tk.END)
+        widget.tag_remove("comment", "1.0", tk.END)
     except tk.TclError:
         return
 
-    vars_set = set(get_vars()) if get_vars else set()
-    if not vars_set:
-        return
-
     text = widget.get("1.0", "end-1c")
-    i = 0
-    n = len(text)
-    while i < n:
-        j = text.find("__", i)
-        if j == -1:
-            break
 
-        k = j + 2
-        m = re.match(r"([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)", text[k:])
-        if not m:
-            # 슬라이딩: '___var__'처럼 '__' 뒤에 식별자가 없으면 '_'만 소비
-            i = j + 1
-            continue
+    # 주석 처리: 세미콜론으로 시작하는 줄을 회색으로 표시
+    start = 0
+    for line in text.splitlines(True):
+        stripped = line.lstrip()
+        if stripped.startswith(";"):
+            widget.tag_add("comment", f"1.0+{start}c", f"1.0+{start + len(line)}c")
+        start += len(line)
+    widget.tag_configure("comment", foreground="gray")
 
-        name = m.group(1)
-        k += m.end()
+    vars_set = set(get_vars()) if get_vars else set()
+    if vars_set:
+        i = 0
+        n = len(text)
+        while i < n:
+            j = text.find("__", i)
+            if j == -1:
+                break
 
-        if k + 2 <= n and text.startswith("__", k):
-            if name in vars_set:
-                start_pos = f"1.0+{j}c"
-                end_pos = f"1.0+{k + 2}c"
-                widget.tag_add("var", start_pos, end_pos)
-            # 정의 여부에 따라 소비 범위 결정
-            i = k + 2 if name in vars_set else k
-        else:
-            # 슬라이딩: 닫힘 '__'가 없으면 '_'만 소비
-            i = j + 1
+            k = j + 2
+            m = re.match(r"([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)", text[k:])
+            if not m:
+                # 슬라이딩: '___var__'처럼 '__' 뒤에 식별자가 없으면 '_'만 소비
+                i = j + 1
+                continue
 
-    # 변수 스타일 설정
-    base_font = tkfont.Font(font=widget.cget("font"))
-    highlight_font = base_font.copy()
-    highlight_font.configure(weight="bold")
-    widget.tag_configure("var", foreground="navy", font=highlight_font)
+            name = m.group(1)
+            k += m.end()
+
+            if k + 2 <= n and text.startswith("__", k):
+                if name in vars_set:
+                    start_pos = f"1.0+{j}c"
+                    end_pos = f"1.0+{k + 2}c"
+                    widget.tag_add("var", start_pos, end_pos)
+                # 정의 여부에 따라 소비 범위 결정
+                i = k + 2 if name in vars_set else k
+            else:
+                # 슬라이딩: 닫힘 '__'가 없으면 '_'만 소비
+                i = j + 1
+
+        # 변수 스타일 설정
+        base_font = tkfont.Font(font=widget.cget("font"))
+        highlight_font = base_font.copy()
+        highlight_font.configure(weight="bold")
+        widget.tag_configure("var", foreground="navy", font=highlight_font)
 
 
 # ---------- 에디터 GUI ----------
