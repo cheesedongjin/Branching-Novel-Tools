@@ -1,0 +1,12 @@
+{
+  "fonts": {
+    "chapter": {"family": "Segoe UI", "size": 11, "weight": "bold"},
+    "title": {"family": "Segoe UI", "size": 12, "weight": "bold"}
+  },
+  "colors": {
+    "path": "#666666"
+  },
+  "icons": {
+    "app": "appicon.png"
+  }
+}
