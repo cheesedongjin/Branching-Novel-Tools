@@ -67,6 +67,10 @@ Conditions and expressions support:
 - Comparisons: `== != < <= > >=`.
 - Logical operators: `!` (not), `&`/`&&` (and), `|`/`||` (or).
 - Parentheses for grouping.
+- Assignment expressions such as `x = 1` or `x += 2`. When a condition
+  contains only assignments the choice is still shown. If assignments and
+  other tests are combined with `and`, each part runs from left to right and
+  all non-assignment expressions must evaluate to true.
 
 Lines starting with `;` are treated as comments and ignored. Empty lines still
 serve only as paragraph separators.
