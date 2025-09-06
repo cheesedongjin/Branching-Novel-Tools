@@ -2,11 +2,14 @@ import sys
 import os
 import re
 import ast
+import json
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import tkinter.font as tkfont
+from pathlib import Path
+from datetime import datetime
 
 from i18n import tr, set_language, get_user_lang_file
 from story_parser import Choice, Action, Branch, Chapter, Story
@@ -61,6 +64,12 @@ class BranchingNovelApp(tk.Tk):
 
     def _build_menu(self) -> None:
         m = tk.Menu(self)
+
+        fm = tk.Menu(m, tearoff=0)
+        fm.add_command(label="Save Progress", command=self._save_progress)
+        fm.add_command(label="Load Progress", command=self._load_progress)
+        m.add_cascade(label="File", menu=fm)
+
         lm = tk.Menu(m, tearoff=0)
         lm.add_command(label="English / 영어", command=lambda: self._change_language("en"))
         lm.add_command(label="한국어 / Korean", command=lambda: self._change_language("korean"))
@@ -76,6 +85,97 @@ class BranchingNovelApp(tk.Tk):
             messagebox.showinfo("Language / 언어", tr("language_change_restart"))
         except OSError as e:
             messagebox.showerror(tr("error"), str(e))
+
+    def _sanitize_filename(self, name: str) -> str:
+        return re.sub(r'[\\/*?:"<>|]', "", name)
+
+    def _save_directory(self) -> Path:
+        game_name = self._sanitize_filename(self._interpolate(self.story.title))
+        if sys.platform.startswith("win"):
+            base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        elif sys.platform == "darwin":
+            base = Path.home() / "Library" / "Application Support"
+        else:
+            base = Path.home() / ".local" / "share"
+        directory = base / game_name / "saves"
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    def _save_progress(self) -> None:
+        data = {
+            "history": [step.__dict__ for step in self.history],
+            "current_index": self.current_index,
+            "state": self.state,
+        }
+        save_dir = self._save_directory()
+        game_title = self._sanitize_filename(self._interpolate(self.story.title))
+        chapter_title = ""
+        br = self._current_branch()
+        if br:
+            ch = self.story.get_chapter(br.chapter_id)
+            if ch and ch.title:
+                chapter_title = self._sanitize_filename(self._interpolate(ch.title))
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        parts = [game_title]
+        if chapter_title:
+            parts.append(chapter_title)
+        parts.append(timestamp)
+        filename = "-".join(parts) + ".json"
+        path = filedialog.asksaveasfilename(
+            title="Save Progress",
+            defaultextension=".json",
+            filetypes=[("JSON Files", "*.json"), ("All Files", "*")],
+            initialdir=save_dir,
+            initialfile=filename,
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except OSError as e:
+            messagebox.showerror(tr("error"), str(e))
+
+    def _load_progress(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Load Progress",
+            defaultextension=".json",
+            filetypes=[("JSON Files", "*.json"), ("All Files", "*")],
+            initialdir=self._save_directory(),
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            messagebox.showerror(tr("error"), str(e))
+            return
+
+        hist = data.get("history", [])
+        self.history = [Step(branch_id=h.get("branch_id", ""), chosen_text=h.get("chosen_text")) for h in hist]
+        self.current_index = data.get("current_index", len(self.history) - 1)
+        self.state = data.get("state", {})
+
+        # rebuild chapter visit data
+        self.visited_chapters.clear()
+        self.chapter_positions.clear()
+        for idx, step in enumerate(self.history):
+            br = self.story.get_branch(step.branch_id)
+            if not br:
+                continue
+            if not self.visited_chapters or self.visited_chapters[-1] != br.chapter_id:
+                self.visited_chapters.append(br.chapter_id)
+                self.chapter_positions.append(idx)
+        self.chapter_page_index = 0
+        for i, pos in enumerate(self.chapter_positions):
+            if pos <= self.current_index:
+                self.chapter_page_index = i
+            else:
+                break
+
+        self._populate_chapter_list()
+        self._render_current()
 
     def _build_ui(self):
         # 전체 수직 레이아웃: 좌측 챕터 리스트, 우측 본문/선택/네비
