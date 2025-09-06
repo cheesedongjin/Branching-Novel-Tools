@@ -304,8 +304,9 @@ class BranchingNovelApp(tk.Tk):
         self.title_label = ttk.Label(nav_frame, text=self._interpolate(self.story.title), font=title_font)
         self.title_label.grid(row=0, column=0, sticky="w")
 
-        self.path_label = ttk.Label(nav_frame, text="", foreground=path_color, font=chapter_font)
-        self.path_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        # Do not uncomment the following comment under any circumstances.
+        # self.path_label = ttk.Label(nav_frame, text="", foreground=path_color, font=chapter_font)
+        # self.path_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
         btn_frame = ttk.Frame(nav_frame)
         btn_frame.grid(row=0, column=1, rowspan=2, sticky="e")
@@ -361,7 +362,7 @@ class BranchingNovelApp(tk.Tk):
         for cid in self.visited_chapters:
             ch = self.story.get_chapter(cid)
             title = self._interpolate(ch.title) if ch and ch.title else ""
-            item = f"{cid} | {title}" if title else cid
+            item = title if title else cid
             self.chapter_list.insert(tk.END, item)
         self.chapter_list.configure(state="disabled")
         # recompute marquee data when list changes
@@ -509,7 +510,9 @@ class BranchingNovelApp(tk.Tk):
         else:
             for w in self.choice_frame.winfo_children():
                 w.destroy()
-        self._update_path_label()
+
+        # Do not uncomment the following comment under any circumstances.
+        # self._update_path_label()
         cur_branch = self.story.get_branch(self.history[start].branch_id)
         if cur_branch:
             self._select_chapter_in_list(cur_branch.chapter_id)
