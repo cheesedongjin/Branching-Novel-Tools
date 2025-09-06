@@ -40,6 +40,10 @@ class BranchingNovelApp(tk.Tk):
         self.story = story
         self.file_path = file_path
 
+        # 테마 로드
+        self.theme, self._theme_dir = self._load_theme()
+        self._icon_image: Optional[tk.PhotoImage] = None
+
         # 상태 값과 옵션
         self.show_disabled = show_disabled
         self.state: Dict[str, Union[int, float, bool, str]] = {}
@@ -61,6 +65,52 @@ class BranchingNovelApp(tk.Tk):
 
         # 시작 챕터로 이동
         self._reset_to_start()
+
+    def _load_theme(self, name: str = "default") -> Tuple[Dict[str, Any], Path]:
+        """Load theme configuration from /themes.
+
+        Returns a tuple of (theme_dict, theme_directory). If theme files are
+        missing or invalid, built-in defaults are used.
+        """
+        base_dir = Path(__file__).parent / "themes"
+        theme_dir = base_dir
+        theme_file = theme_dir / "theme.json"
+
+        default = {
+            "fonts": {
+                "chapter": {"family": "Segoe UI", "size": 11, "weight": "bold"},
+                "title": {"family": "Segoe UI", "size": 12, "weight": "bold"},
+                "text": {"family": "Malgun Gothic", "size": 12}
+                if sys.platform.startswith("win")
+                else {"family": "Noto Sans CJK KR", "size": 12},
+            },
+            "colors": {"path": "#666666"},
+            "icons": {"app": "appicon.png"},
+        }
+
+        if theme_file.exists():
+            try:
+                with open(theme_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for key in ("fonts", "colors", "icons"):
+                    if key in data:
+                        default.setdefault(key, {}).update(data[key])
+            except (OSError, json.JSONDecodeError):
+                pass
+        else:
+            theme_dir = base_dir / name
+            theme_file = theme_dir / "theme.json"
+            if theme_file.exists():
+                try:
+                    with open(theme_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    for key in ("fonts", "colors", "icons"):
+                        if key in data:
+                            default.setdefault(key, {}).update(data[key])
+                except (OSError, json.JSONDecodeError):
+                    pass
+
+        return default, theme_dir
 
     def _build_menu(self) -> None:
         m = tk.Menu(self)
@@ -178,6 +228,33 @@ class BranchingNovelApp(tk.Tk):
         self._render_current()
 
     def _build_ui(self):
+        # 아이콘 적용
+        icons = self.theme.get("icons", {})
+        app_icon = icons.get("app")
+        icon_path = self._theme_dir / app_icon if app_icon else None
+        if icon_path and icon_path.exists():
+            self._icon_image = tk.PhotoImage(file=str(icon_path))
+            self.iconphoto(False, self._icon_image)
+
+        # 폰트 및 색상 설정
+        fonts = self.theme.get("fonts", {})
+        colors = self.theme.get("colors", {})
+
+        def _get_font(name: str, fallback: Dict[str, Any]) -> tkfont.Font:
+            spec = fonts.get(name, fallback).copy()
+            file = spec.pop("file", None)
+            if file:
+                spec["file"] = str(self._theme_dir / file)
+            return tkfont.Font(**spec)
+
+        chapter_font = _get_font("chapter", {"family": "Segoe UI", "size": 11, "weight": "bold"})
+        title_font = _get_font("title", {"family": "Segoe UI", "size": 12, "weight": "bold"})
+        text_default = {"family": "Malgun Gothic", "size": 12} if sys.platform.startswith("win") else {"family": "Noto Sans CJK KR", "size": 12}
+        text_font = _get_font("text", text_default)
+        path_color = colors.get("path", "#666666")
+
+        self._fonts = {"chapter": chapter_font, "title": title_font, "text": text_font}
+
         # 전체 수직 레이아웃: 좌측 챕터 리스트, 우측 본문/선택/네비
         self.columnconfigure(0, weight=0)  # left panel width fixed
         self.columnconfigure(1, weight=1)  # right panel expands
@@ -189,8 +266,8 @@ class BranchingNovelApp(tk.Tk):
         left_frame.rowconfigure(1, weight=1)
         left_frame.columnconfigure(0, weight=1)
 
-        ttk.Label(left_frame, text="Chapters", font=("Segoe UI", 11, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 6))
-        self.chapter_list = tk.Listbox(left_frame, exportselection=False, height=25)
+        ttk.Label(left_frame, text="Chapters", font=chapter_font).grid(row=0, column=0, sticky="w", pady=(0, 6))
+        self.chapter_list = tk.Listbox(left_frame, exportselection=False, height=25, font=chapter_font)
         self.chapter_list.grid(row=1, column=0, sticky="nsw")
         # 사용자 클릭/포커스 방지
         self.chapter_list.configure(state="disabled", takefocus=0)
@@ -208,10 +285,10 @@ class BranchingNovelApp(tk.Tk):
         nav_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         nav_frame.columnconfigure(1, weight=1)
 
-        self.title_label = ttk.Label(nav_frame, text=self._interpolate(self.story.title), font=("Segoe UI", 12, "bold"))
+        self.title_label = ttk.Label(nav_frame, text=self._interpolate(self.story.title), font=title_font)
         self.title_label.grid(row=0, column=0, sticky="w")
 
-        self.path_label = ttk.Label(nav_frame, text="", foreground="#666666")
+        self.path_label = ttk.Label(nav_frame, text="", foreground=path_color, font=chapter_font)
         self.path_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
         btn_frame = ttk.Frame(nav_frame)
@@ -231,8 +308,7 @@ class BranchingNovelApp(tk.Tk):
         text_frame.columnconfigure(0, weight=1)
 
         self.text_widget = tk.Text(
-            text_frame, wrap="word", state="disabled", relief="flat",
-            font=("Malgun Gothic", 12) if sys.platform.startswith("win") else ("Noto Sans CJK KR", 12)
+            text_frame, wrap="word", state="disabled", relief="flat", font=text_font
         )
         self.text_widget.grid(row=0, column=0, sticky="nsew")
 
