@@ -68,8 +68,8 @@ Conditions and expressions support:
 - Logical operators: `!` (not), `&`/`&&` (and), `|`/`||` (or).
 - Parentheses for grouping.
 
-No separate comment syntax is supported; empty lines only serve as paragraph
-separators.
+Lines starting with `;` are treated as comments and ignored. Empty lines still
+serve only as paragraph separators.
 
 ## Example
 
@@ -78,6 +78,7 @@ separators.
 @start: intro
 @show-disabled: true
 ! coins = 5
+; This is a comment line
 
 @chapter intro: Prologue
 # intro
