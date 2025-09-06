@@ -282,8 +282,10 @@ begin
     '$json = $resp.Content | ConvertFrom-Json; ' +
     '$tag = $json.tag_name; ' +
     '$ver = if($tag -and $tag.StartsWith("v")) { $tag.Substring(1) } else { $tag }; ' +
-    '$zip = ' + PSQuote('https://github.com/{#GitHubRepo}/releases/latest/download/latest-{#ReleaseAssetPattern}.zip') + '; ' +
-    '$sha = ' + PSQuote('https://github.com/{#GitHubRepo}/releases/latest/download/latest-{#ReleaseAssetPattern}.sha256') + '; ' +
+    '$zipAsset = $json.assets | Where-Object { $_.name -eq ' + PSQuote('latest-{#ReleaseAssetPattern}.zip') + ' } | Select-Object -First 1; ' +
+    '$shaAsset = $json.assets | Where-Object { $_.name -eq ' + PSQuote('latest-{#ReleaseAssetPattern}.sha256') + ' } | Select-Object -First 1; ' +
+    '$zip = $zipAsset.browser_download_url; ' +
+    '$sha = $shaAsset.browser_download_url; ' +
     '$out = @($ver, $zip, $sha) -join "|"; ' +
     'Set-Content -LiteralPath ' + PSQuote(OutPath) + ' -Value $out -Encoding ASCII;';
   if not WriteAndRunPS(Cmd, LogPath, 'github_latest') then
@@ -321,8 +323,8 @@ begin
   Cmd :=
     '$ErrorActionPreference = ''Stop''; ' +
     '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ' +
-    'Invoke-WebRequest -Uri ' + PSQuote(UrlZip) + ' -OutFile ' + PSQuote(DestZip) + '; ' +
-    'Invoke-WebRequest -Uri ' + PSQuote(UrlSha) + ' -OutFile ' + PSQuote(DestSha) + '; ' +
+    'Invoke-WebRequest -Uri (' + PSQuote(UrlZip) + ' + ' + PSQuote('?cb=') + ' + [Guid]::NewGuid().ToString()) -OutFile ' + PSQuote(DestZip) + '; ' +
+    'Invoke-WebRequest -Uri (' + PSQuote(UrlSha) + ' + ' + PSQuote('?cb=') + ' + [Guid]::NewGuid().ToString()) -OutFile ' + PSQuote(DestSha) + '; ' +
     '$expected = (Get-Content -LiteralPath ' + PSQuote(DestSha) + ' | Select-Object -First 1).Split('' '')[0]; ' +
     'if ([string]::IsNullOrWhiteSpace($expected)) { throw ''Empty SHA file'' } ' +
     '$actual = (Get-FileHash -LiteralPath ' + PSQuote(DestZip) + ' -Algorithm SHA256).Hash.ToLower(); ' +
