@@ -1,7 +1,9 @@
 import os
+import json
 
 _DEFAULT_LANG = 'en'
 _LANG_DIR = os.path.join(os.path.expanduser('~'), '.branching_novel')
+_LOCALE_DIR = os.path.join(os.path.dirname(__file__), 'locales')
 
 
 def get_user_lang_file(name: str = 'language.txt') -> str:
@@ -31,9 +33,29 @@ def _load_lang_from_file(path: str) -> str:
 LANG = _load_lang_from_file(_DEFAULT_LANG_FILE)
 
 
+def _load_locale_strings(lang: str) -> None:
+    """Load locale from /locales/<lang>.json and merge with defaults."""
+    base = _STRINGS.get(_DEFAULT_LANG, {}).copy()
+    base.update(_STRINGS.get(lang, {}))
+
+    path = os.path.join(_LOCALE_DIR, f"{lang}.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                base.update(data)
+    except OSError:
+        pass
+    except json.JSONDecodeError:
+        pass
+
+    _STRINGS[lang] = base
+
+
 def set_language(lang: str) -> None:
     global LANG
-    LANG = lang
+    LANG = _LANG_ALIASES.get(lang.lower(), _DEFAULT_LANG)
+    _load_locale_strings(LANG)
 
 
 def set_language_from_file(path: str = _DEFAULT_LANG_FILE) -> None:
@@ -338,9 +360,11 @@ _STRINGS = {
         'definition_witnessed': '- 증거: 실제 값으로 내부만 따라가 반복 도달 확인',
         'definition_possible': '- 가능: 순환은 있으나 외부 탈출이 조건에 따라 열릴 수 있음',
         'language_change_restart': '언어가 저장되었습니다. 적용하려면 재시작하세요.',
-        'close': '닫기',
+    'close': '닫기',
     },
 }
+
+_load_locale_strings(LANG)
 
 
 def tr(key: str, **kwargs) -> str:
