@@ -326,6 +326,7 @@ begin
     'Invoke-WebRequest -Uri (' + PSQuote(UrlZip) + ' + ' + PSQuote('?cb=') + ' + [Guid]::NewGuid().ToString()) -OutFile ' + PSQuote(DestZip) + '; ' +
     'Invoke-WebRequest -Uri (' + PSQuote(UrlSha) + ' + ' + PSQuote('?cb=') + ' + [Guid]::NewGuid().ToString()) -OutFile ' + PSQuote(DestSha) + '; ' +
     '$expected = (Get-Content -LiteralPath ' + PSQuote(DestSha) + ' | Select-Object -First 1).Split('' '')[0]; ' +
+    '$expected = $expected.Trim([char]0xFEFF); ' +
     'if ([string]::IsNullOrWhiteSpace($expected)) { throw ''Empty SHA file'' } ' +
     '$actual = (Get-FileHash -LiteralPath ' + PSQuote(DestZip) + ' -Algorithm SHA256).Hash.ToLower(); ' +
     'if ($expected.ToLower() -ne $actual) { throw (''Hash mismatch. Expected: '' + $expected + '', Actual: '' + $actual) }';
