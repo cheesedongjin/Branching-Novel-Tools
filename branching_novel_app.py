@@ -3,7 +3,7 @@ import os
 import re
 import ast
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -25,6 +25,7 @@ class Step:
     """
     branch_id: str
     chosen_text: Optional[str] = None
+    choice_actions: List[Action] = field(default_factory=list)
 
 
 class BranchingNovelApp(tk.Tk):
@@ -153,8 +154,15 @@ class BranchingNovelApp(tk.Tk):
         return directory
 
     def _save_progress(self) -> None:
+        hist_data: List[Dict[str, Any]] = []
+        for step in self.history:
+            hist_data.append({
+                "branch_id": step.branch_id,
+                "chosen_text": step.chosen_text,
+                "choice_actions": [a.__dict__ for a in step.choice_actions],
+            })
         data = {
-            "history": [step.__dict__ for step in self.history],
+            "history": hist_data,
             "current_index": self.current_index,
             "state": self.state,
         }
@@ -204,7 +212,14 @@ class BranchingNovelApp(tk.Tk):
             return
 
         hist = data.get("history", [])
-        self.history = [Step(branch_id=h.get("branch_id", ""), chosen_text=h.get("chosen_text")) for h in hist]
+        self.history = [
+            Step(
+                branch_id=h.get("branch_id", ""),
+                chosen_text=h.get("chosen_text"),
+                choice_actions=[Action(**a) for a in h.get("choice_actions", [])],
+            )
+            for h in hist
+        ]
         self.current_index = data.get("current_index", len(self.history) - 1)
         self.state = data.get("state", {})
 
@@ -564,6 +579,7 @@ class BranchingNovelApp(tk.Tk):
         if 0 <= self.current_index < len(self.history):
             cur = self.history[self.current_index]
             cur.chosen_text = self._interpolate(choice.text)
+            cur.choice_actions = list(choice.actions)
             self.history[self.current_index] = cur
 
         # 미래 히스토리 절단 후 다음 스텝 추가
@@ -619,6 +635,36 @@ class BranchingNovelApp(tk.Tk):
             if not br:
                 continue
             for act in br.actions:
+                cur = state.get(act.var, 0)
+                val = act.value
+                if act.op != "set":
+                    if isinstance(cur, bool):
+                        cur = int(cur)
+                    if isinstance(val, bool):
+                        val = int(val)
+                if act.op == "set":
+                    state[act.var] = val
+                elif act.op == "expr":
+                    expr = self._to_python_expr(str(val))
+                    try:
+                        state[act.var] = eval(expr, {}, dict(state))
+                    except Exception:
+                        state[act.var] = 0
+                elif act.op == "add":
+                    state[act.var] = cur + val
+                elif act.op == "sub":
+                    state[act.var] = cur - val
+                elif act.op == "mul":
+                    state[act.var] = cur * val
+                elif act.op == "div":
+                    state[act.var] = cur / val
+                elif act.op == "floordiv":
+                    state[act.var] = cur // val
+                elif act.op == "mod":
+                    state[act.var] = cur % val
+                elif act.op == "pow":
+                    state[act.var] = cur ** val
+            for act in getattr(step, "choice_actions", []):
                 cur = state.get(act.var, 0)
                 val = act.value
                 if act.op != "set":
