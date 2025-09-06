@@ -1,14 +1,30 @@
 import os
 import json
+import sys
+from pathlib import Path
 
 _DEFAULT_LANG = 'en'
-_LANG_DIR = os.path.join(os.path.expanduser('~'), '.branching_novel')
-_LOCALE_DIR = os.path.join(os.path.dirname(__file__), 'locales')
+def get_app_data_dir() -> Path:
+    if sys.platform.startswith("win"):
+        root = Path(os.getenv("APPDATA", Path.home() / "AppData" / "Roaming"))
+    elif sys.platform == "darwin":
+        root = Path.home() / "Library" / "Application Support"
+    else:
+        root = Path.home() / ".local" / "share"
+    path = root / "BranchingNovel"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+_APP_DATA_DIR = get_app_data_dir()
+_LANG_DIR = _APP_DATA_DIR
+_LOCALE_DIR = _APP_DATA_DIR / "locales"
+_LOCALE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_user_lang_file(name: str = 'language.txt') -> str:
-    os.makedirs(_LANG_DIR, exist_ok=True)
-    return os.path.join(_LANG_DIR, name)
+    _LANG_DIR.mkdir(parents=True, exist_ok=True)
+    return str(_LANG_DIR / name)
 
 
 _DEFAULT_LANG_FILE = get_user_lang_file()
@@ -34,11 +50,11 @@ LANG = _load_lang_from_file(_DEFAULT_LANG_FILE)
 
 
 def _load_locale_strings(lang: str) -> None:
-    """Load locale from /locales/<lang>.json and merge with defaults."""
+    """Load locale from the app data 'locales' folder and merge with defaults."""
     base = _STRINGS.get(_DEFAULT_LANG, {}).copy()
     base.update(_STRINGS.get(lang, {}))
 
-    path = os.path.join(_LOCALE_DIR, f"{lang}.json")
+    path = _LOCALE_DIR / f"{lang}.json"
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)

@@ -11,7 +11,7 @@ import tkinter.font as tkfont
 from pathlib import Path
 from datetime import datetime
 
-from i18n import tr, set_language, get_user_lang_file
+from i18n import tr, set_language, get_user_lang_file, get_app_data_dir
 from story_parser import Choice, Action, Branch, Chapter, Story
 
 VAR_PATTERN = re.compile(r"__([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)__")
@@ -67,12 +67,13 @@ class BranchingNovelApp(tk.Tk):
         self._reset_to_start()
 
     def _load_theme(self, name: str = "default") -> Tuple[Dict[str, Any], Path]:
-        """Load theme configuration from /themes.
+        """Load theme configuration from the app data 'themes' folder.
 
         Returns a tuple of (theme_dict, theme_directory). If theme files are
         missing or invalid, built-in defaults are used.
         """
-        base_dir = Path(__file__).parent / "themes"
+        base_dir = get_app_data_dir() / "themes"
+        base_dir.mkdir(parents=True, exist_ok=True)
         theme_dir = base_dir
         theme_file = theme_dir / "theme.json"
 
