@@ -268,15 +268,15 @@ class VariableDialog(tk.Toplevel):
         return bool(re.fullmatch(r"[A-Za-z0-9_]*", proposed))
 
 
-class ConditionDialog(tk.Toplevel):
+class ActionDialog(tk.Toplevel):
     def __init__(self, master, variables: List[str], initial: str, story: Story):
         super().__init__(master)
-        self.title(tr("edit_conditions"))
+        self.title(tr("edit_actions"))
         self.resizable(False, False)
         self.result_ok = False
         self.variables = variables
         self.story = story
-        self.conditions: List[Tuple[str, str, str]] = self._parse_initial(initial)
+        self.actions_raw: List[Tuple[str, str, str]] = self._parse_initial(initial)
 
         frm = ttk.Frame(self, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
@@ -315,26 +315,26 @@ class ConditionDialog(tk.Toplevel):
         self.wait_window(self)
 
     def _parse_initial(self, expr: str) -> List[Tuple[str, str, str]]:
-        conds: List[Tuple[str, str, str]] = []
+        acts: List[Tuple[str, str, str]] = []
         if not expr:
-            return conds
-        parts = re.split(r"\s+and\s+", expr)
+            return acts
+        parts = [p.strip() for p in expr.split(";") if p.strip()]
         for part in parts:
-            m = re.match(r"\s*(\w+)\s*(==|!=|>=|<=|>|<|=|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)\s*", part)
+            m = re.match(r"\s*(\w+)\s*(=|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)\s*", part)
             if m:
-                conds.append((m.group(1), m.group(2), m.group(3)))
-        return conds
+                acts.append((m.group(1), m.group(2), m.group(3)))
+        return acts
 
     def _refresh_tree(self):
         for i in self.tree.get_children():
             self.tree.delete(i)
-        for var, op, val in self.conditions:
+        for var, op, val in self.actions_raw:
             self.tree.insert("", tk.END, values=(var, op, val))
 
     def _add(self):
         dlg = ConditionRowDialog(self, self.variables, None)
         if dlg.result_ok and dlg.condition:
-            self.conditions.append(dlg.condition)
+            self.actions_raw.append(dlg.condition)
             self._refresh_tree()
 
     def _edit(self):
@@ -342,9 +342,9 @@ class ConditionDialog(tk.Toplevel):
         if not sel:
             return
         idx = self.tree.index(sel[0])
-        dlg = ConditionRowDialog(self, self.variables, self.conditions[idx])
+        dlg = ConditionRowDialog(self, self.variables, self.actions_raw[idx])
         if dlg.result_ok and dlg.condition:
-            self.conditions[idx] = dlg.condition
+            self.actions_raw[idx] = dlg.condition
             self._refresh_tree()
 
     def _delete(self):
@@ -352,7 +352,7 @@ class ConditionDialog(tk.Toplevel):
         if not sel:
             return
         idx = self.tree.index(sel[0])
-        self.conditions.pop(idx)
+        self.actions_raw.pop(idx)
         self._refresh_tree()
 
     def _add_variable(self):
@@ -367,7 +367,183 @@ class ConditionDialog(tk.Toplevel):
             editor._update_preview()
 
     def _ok(self):
-        self.condition_str = " and ".join(f"{v} {op} {val}" for v, op, val in self.conditions)
+        self.action_str = "; ".join(f"{v} {op} {val}" for v, op, val in self.actions_raw)
+        self.actions: List[Action] = []
+        op_map = {
+            "=": "set",
+            "+=": "add",
+            "-=": "sub",
+            "*=": "mul",
+            "/=": "div",
+            "//=": "floordiv",
+            "%=": "mod",
+            "**=": "pow",
+        }
+        for v, op, val in self.actions_raw:
+            try:
+                parsed = self._parse_value(val)
+                if op == "=":
+                    self.actions.append(Action(op="set", var=v, value=parsed))
+                else:
+                    self.actions.append(Action(op=op_map[op], var=v, value=parsed))
+            except Exception:
+                self.actions.append(Action(op="expr", var=v, value=val))
+        self.result_ok = True
+        self.destroy()
+
+    def _cancel(self):
+        self.result_ok = False
+        self.destroy()
+
+    def _parse_value(self, token: str) -> Union[int, float, bool, str]:
+        t = token.lower()
+        if t == "true":
+            return True
+        if t == "false":
+            return False
+        if (token.startswith('"') and token.endswith('"')) or (
+            token.startswith("'") and token.endswith("'")
+        ):
+            return ast.literal_eval(token)
+        try:
+            return int(token)
+        except ValueError:
+            try:
+                return float(token)
+            except ValueError:
+                return token
+
+
+class ConditionDialog(tk.Toplevel):
+    def __init__(self, master, variables: List[str], initial: str):
+        super().__init__(master)
+        self.title(tr("edit_conditions"))
+        self.resizable(False, False)
+        self.result_ok = False
+        self.variables = variables
+
+        frm = ttk.Frame(self, padding=10)
+        frm.grid(row=0, column=0, sticky="nsew")
+        frm.rowconfigure(0, weight=1)
+        frm.columnconfigure(0, weight=1)
+
+        self.tree = ttk.Treeview(frm, columns=("kind", "expr"), show="tree")
+        self.tree.grid(row=0, column=0, sticky="nsew")
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=0, column=1, sticky="ns", padx=(8,0))
+        ttk.Button(btns, text=tr("add"), command=self._add_condition).grid(row=0, column=0, pady=2)
+        ttk.Button(btns, text="Add AND", command=lambda: self._add_group("and")).grid(row=1, column=0, pady=2)
+        ttk.Button(btns, text="Add OR", command=lambda: self._add_group("or")).grid(row=2, column=0, pady=2)
+        ttk.Button(btns, text=tr("edit"), command=self._edit).grid(row=3, column=0, pady=2)
+        ttk.Button(btns, text=tr("delete"), command=self._delete).grid(row=4, column=0, pady=2)
+
+        bottom = ttk.Frame(frm)
+        bottom.grid(row=1, column=0, columnspan=2, sticky="e", pady=(8,0))
+        ok = ttk.Button(bottom, text=tr("ok"), command=self._ok)
+        cancel = ttk.Button(bottom, text=tr("cancel"), command=self._cancel)
+        ok.grid(row=0, column=0, padx=5)
+        cancel.grid(row=0, column=1)
+
+        self.root_item = self.tree.insert("", tk.END, text="AND", values=("op", "and"))
+        self._parse_initial(initial)
+
+        self.tree.bind("<ButtonPress-1>", self._start_drag)
+        self.tree.bind("<ButtonRelease-1>", self._drop)
+
+        self.grab_set()
+        self.tree.focus_set()
+        self.wait_window(self)
+
+    def _start_drag(self, event):
+        self._drag_item = self.tree.identify_row(event.y)
+
+    def _drop(self, event):
+        if not getattr(self, "_drag_item", None):
+            return
+        target = self.tree.identify_row(event.y)
+        if not target:
+            target = self.root_item
+        kind = self.tree.set(target, "kind")
+        if kind != "op":
+            target = self.tree.parent(target)
+        self.tree.move(self._drag_item, target, "end")
+        self._drag_item = None
+
+    def _add_condition(self):
+        sel = self.tree.selection()
+        parent = sel[0] if sel and self.tree.set(sel[0], "kind") == "op" else self.tree.parent(sel[0]) if sel else self.root_item
+        dlg = ConditionRowDialog(self, self.variables, None)
+        if dlg.result_ok and dlg.condition:
+            expr = f"{dlg.condition[0]} {dlg.condition[1]} {dlg.condition[2]}"
+            self.tree.insert(parent, tk.END, text=expr, values=("cond", expr))
+
+    def _add_group(self, op: str):
+        sel = self.tree.selection()
+        parent = sel[0] if sel and self.tree.set(sel[0], "kind") == "op" else self.tree.parent(sel[0]) if sel else self.root_item
+        text = op.upper()
+        self.tree.insert(parent, tk.END, text=text, values=("op", op))
+
+    def _edit(self):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        item = sel[0]
+        kind = self.tree.set(item, "kind")
+        if kind == "cond":
+            expr = self.tree.set(item, "expr")
+            m = re.match(r"(\w+)\s*(==|!=|>=|<=|>|<|=|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)", expr)
+            initial = m.groups() if m else None
+            dlg = ConditionRowDialog(self, self.variables, initial)
+            if dlg.result_ok and dlg.condition:
+                expr = f"{dlg.condition[0]} {dlg.condition[1]} {dlg.condition[2]}"
+                self.tree.item(item, text=expr, values=("cond", expr))
+        else:
+            op = self.tree.set(item, "expr")
+            new_op = "or" if op == "and" else "and"
+            self.tree.item(item, text=new_op.upper(), values=("op", new_op))
+
+    def _delete(self):
+        sel = self.tree.selection()
+        if not sel or sel[0] == self.root_item:
+            return
+        self.tree.delete(sel[0])
+
+    def _parse_initial(self, expr: str):
+        expr = expr.strip()
+        if not expr:
+            return
+        try:
+            tree = ast.parse(expr, mode="eval")
+        except Exception:
+            return
+        def build(node, parent):
+            if isinstance(node, ast.BoolOp):
+                op = "and" if isinstance(node.op, ast.And) else "or"
+                item = self.tree.insert(parent, tk.END, text=op.upper(), values=("op", op))
+                for v in node.values:
+                    build(v, item)
+            else:
+                expr = ast.unparse(node) if hasattr(ast, "unparse") else ""
+                self.tree.insert(parent, tk.END, text=expr, values=("cond", expr))
+        build(tree.body, self.root_item)
+
+    def _expr_from_item(self, item: str) -> str:
+        kind = self.tree.set(item, "kind")
+        expr = self.tree.set(item, "expr")
+        if kind == "cond":
+            return expr
+        children = self.tree.get_children(item)
+        parts = [self._expr_from_item(c) for c in children]
+        if not parts:
+            return "1" if expr == "and" else "0"
+        sep = f" {expr} "
+        if len(parts) == 1:
+            return parts[0]
+        return "(" + sep.join(parts) + ")"
+
+    def _ok(self):
+        self.condition_str = self._expr_from_item(self.root_item)
         self.result_ok = True
         self.destroy()
 
@@ -401,7 +577,7 @@ class ChoiceEditor(tk.Toplevel):
         self.cmb_target = ttk.Combobox(frm, values=branch_ids, state="readonly", width=30)
         self.cmb_target.grid(row=3, column=0, sticky="w")
 
-        ttk.Label(frm, text=tr("condition_action_expr")).grid(row=4, column=0, sticky="w")
+        ttk.Label(frm, text=tr("condition_expr")).grid(row=4, column=0, sticky="w")
         cond_frame = ttk.Frame(frm)
         cond_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0,8))
         cond_frame.columnconfigure(0, weight=1)
@@ -409,8 +585,16 @@ class ChoiceEditor(tk.Toplevel):
         self.ent_cond.grid(row=0, column=0, sticky="ew")
         ttk.Button(cond_frame, text=tr("edit_ellipsis"), command=self._open_cond_editor).grid(row=0, column=1, padx=(4,0))
 
+        ttk.Label(frm, text=tr("action_expr")).grid(row=6, column=0, sticky="w")
+        act_frame = ttk.Frame(frm)
+        act_frame.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(0,8))
+        act_frame.columnconfigure(0, weight=1)
+        self.ent_act = ttk.Entry(act_frame, width=50, state="readonly")
+        self.ent_act.grid(row=0, column=0, sticky="ew")
+        ttk.Button(act_frame, text=tr("edit_ellipsis"), command=self._open_act_editor).grid(row=0, column=1, padx=(4,0))
+
         btns = ttk.Frame(frm)
-        btns.grid(row=6, column=0, sticky="e", pady=(10,0))
+        btns.grid(row=8, column=0, sticky="e", pady=(10,0))
         ok = ttk.Button(btns, text=tr("ok"), command=self._ok)
         cancel = ttk.Button(btns, text=tr("cancel"), command=self._cancel)
         ok.grid(row=0, column=0, padx=5)
@@ -429,9 +613,17 @@ class ChoiceEditor(tk.Toplevel):
                 self.ent_cond.delete(0, tk.END)
                 self.ent_cond.insert(0, choice.condition)
                 self.ent_cond.configure(state="readonly")
+            if getattr(choice, "actions", None):
+                self.choice_actions = list(choice.actions)
+                self.ent_act.configure(state="normal")
+                self.ent_act.delete(0, tk.END)
+                self.ent_act.insert(0, "; ".join(self._format_action(a) for a in choice.actions))
+                self.ent_act.configure(state="readonly")
         else:
             if branch_ids:
                 self.cmb_target.current(0)
+        if not hasattr(self, "choice_actions"):
+            self.choice_actions: List[Action] = []
 
         self.bind("<Return>", lambda e: self._ok())
         self.bind("<Escape>", lambda e: self._cancel())
@@ -451,7 +643,7 @@ class ChoiceEditor(tk.Toplevel):
         if not target:
             messagebox.showerror(tr("error"), tr("select_target_branch"))
             return
-        self.choice = Choice(text=text, target_id=target, condition=(cond or None))
+        self.choice = Choice(text=text, target_id=target, condition=(cond or None), actions=list(self.choice_actions))
         self.result_ok = True
         self.destroy()
 
@@ -460,13 +652,42 @@ class ChoiceEditor(tk.Toplevel):
         self.destroy()
 
     def _open_cond_editor(self):
-        dlg = ConditionDialog(self, self.variables, self.ent_cond.get().strip(), self.master.story)
+        dlg = ConditionDialog(self, self.variables, self.ent_cond.get().strip())
         if dlg.result_ok:
             self.ent_cond.configure(state="normal")
             self.ent_cond.delete(0, tk.END)
             self.ent_cond.insert(0, dlg.condition_str)
             self.ent_cond.configure(state="readonly")
-            self.variables = sorted(set(self.variables) | set(self.master.story.variables.keys()))
+
+    def _open_act_editor(self):
+        dlg = ActionDialog(self, self.variables, self.ent_act.get().strip(), self.master.story)
+        if dlg.result_ok:
+            self.ent_act.configure(state="normal")
+            self.ent_act.delete(0, tk.END)
+            self.ent_act.insert(0, dlg.action_str)
+            self.ent_act.configure(state="readonly")
+            self.choice_actions = dlg.actions
+
+    def _format_action(self, act: Action) -> str:
+        op_map = {
+            "set": "=",
+            "add": "+=",
+            "sub": "-=",
+            "mul": "*=",
+            "div": "/=",
+            "floordiv": "//=",
+            "mod": "%=",
+            "pow": "**=",
+            "expr": "=",
+        }
+        val = act.value
+        if isinstance(val, bool):
+            v = str(val).lower()
+        elif isinstance(val, str):
+            v = val
+        else:
+            v = str(val)
+        return f"{act.var} {op_map.get(act.op, '=')} {v}"
 
 class ChapterEditor(tk.Tk):
     def __init__(self):

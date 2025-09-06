@@ -4,18 +4,19 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Union
 
 @dataclass
-class Choice:
-    text: str
-    target_id: str
-    condition: Optional[str] = None
-    line: int = 0
-    source: str = ""
-
-@dataclass
 class Action:
     op: str  # e.g. 'set', 'add', 'sub', 'mul', 'div', 'floordiv', 'mod', 'pow', 'expr'
     var: str
     value: Union[int, float, bool, str]
+    line: int = 0
+    source: str = ""
+
+@dataclass
+class Choice:
+    text: str
+    target_id: str
+    condition: Optional[str] = None
+    actions: List[Action] = field(default_factory=list)
     line: int = 0
     source: str = ""
 
@@ -133,10 +134,29 @@ class Story:
                             if sym:
                                 lines.append(f"! {act.var} {sym} {v}")
                 for c in br.choices:
-                    if c.condition:
-                        lines.append(f"* [{c.condition}] {c.text} -> {c.target_id}")
-                    else:
-                        lines.append(f"* {c.text} -> {c.target_id}")
+                    cond_part = f"[{c.condition}] " if c.condition else ""
+                    act_part = ""
+                    if c.actions:
+                        acts: List[str] = []
+                        for act in c.actions:
+                            if act.op == "expr":
+                                acts.append(f"{act.var} = {act.value}")
+                            else:
+                                val = act.value
+                                if isinstance(val, bool):
+                                    v = str(val).lower()
+                                elif isinstance(val, str):
+                                    v = repr(val)
+                                else:
+                                    v = val
+                                if act.op == "set":
+                                    acts.append(f"{act.var} = {v}")
+                                else:
+                                    sym = op_map.get(act.op)
+                                    if sym:
+                                        acts.append(f"{act.var} {sym} {v}")
+                        act_part = "{" + "; ".join(acts) + "} "
+                    lines.append(f"* {cond_part}{act_part}{c.text} -> {c.target_id}")
                 lines.append("")
         while lines and lines[-1] == "":
             lines.pop()
@@ -294,19 +314,54 @@ class StoryParser:
         left, right = body.split("->", 1)
         left = left.strip()
         condition: Optional[str] = None
+        actions: List[Action] = []
         text: str
         if left.startswith("["):
             end = left.find("]")
             if end == -1:
                 raise ParseError("Missing closing ']' in condition.")
             condition = left[1:end].strip()
-            text = left[end + 1:].strip()
-        else:
-            text = left
+            left = left[end + 1 :].strip()
+        if left.startswith("{"):
+            end = left.find("}")
+            if end == -1:
+                raise ParseError("Missing closing '}' in actions.")
+            actions = self._parse_inline_actions(left[1:end].strip(), line_no, source)
+            left = left[end + 1 :].strip()
+        text = left
         target = right.strip()
         if not text or not target:
             raise ParseError("Choice text or target is empty.")
-        return Choice(text=text, target_id=target, condition=condition, line=line_no, source=source)
+        return Choice(text=text, target_id=target, condition=condition, actions=actions, line=line_no, source=source)
+
+    def _parse_inline_actions(self, content: str, line_no: int, source: str) -> List[Action]:
+        actions: List[Action] = []
+        parts = [p.strip() for p in content.split(";") if p.strip()]
+        for part in parts:
+            m = re.match(r"(\w+)\s*(=|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)", part)
+            if not m:
+                raise ParseError("Invalid action syntax in choice.")
+            var, op, val = m.groups()
+            var = self._ensure_valid_var(var)
+            op_map = {
+                "=": "set",
+                "+=": "add",
+                "-=": "sub",
+                "*=": "mul",
+                "/=": "div",
+                "//=": "floordiv",
+                "%=": "mod",
+                "**=": "pow",
+            }
+            if op == "=":
+                try:
+                    parsed = self._parse_value(val.strip())
+                    actions.append(Action(op="set", var=var, value=parsed, line=line_no, source=source))
+                except ParseError:
+                    actions.append(Action(op="expr", var=var, value=val.strip(), line=line_no, source=source))
+            else:
+                actions.append(Action(op=op_map[op], var=var, value=self._parse_value(val.strip()), line=line_no, source=source))
+        return actions
 
     def _parse_action_line(self, line: str, line_no: int, source: str) -> Action:
         content = line[1:].strip()
