@@ -26,6 +26,7 @@ class Step:
     branch_id: str
     chosen_text: Optional[str] = None
     choice_actions: List[Action] = field(default_factory=list)
+    rendered_paragraphs: List[str] = field(default_factory=list)
 
 
 class BranchingNovelApp(tk.Tk):
@@ -160,6 +161,7 @@ class BranchingNovelApp(tk.Tk):
                 "branch_id": step.branch_id,
                 "chosen_text": step.chosen_text,
                 "choice_actions": [a.__dict__ for a in step.choice_actions],
+                "rendered_paragraphs": step.rendered_paragraphs,
             })
         data = {
             "history": hist_data,
@@ -217,6 +219,7 @@ class BranchingNovelApp(tk.Tk):
                 branch_id=h.get("branch_id", ""),
                 chosen_text=h.get("chosen_text"),
                 choice_actions=[Action(**a) for a in h.get("choice_actions", [])],
+                rendered_paragraphs=h.get("rendered_paragraphs", []),
             )
             for h in hist
         ]
@@ -496,7 +499,14 @@ class BranchingNovelApp(tk.Tk):
             if not br:
                 continue
             if br.paragraphs:
-                lines.append("\n\n".join(self._interpolate(p) for p in br.paragraphs))
+                if not step.rendered_paragraphs:
+                    state_i = self._compute_state(i)
+                    prev_state = self.state
+                    self.state = state_i
+                    step.rendered_paragraphs = [self._interpolate(p) for p in br.paragraphs]
+                    self.state = prev_state
+                    self.history[i] = step
+                lines.append("\n\n".join(step.rendered_paragraphs))
             if i + 1 < end and step.chosen_text:
                 lines.append(f"> {step.chosen_text}")
         text = "\n".join(lines)
