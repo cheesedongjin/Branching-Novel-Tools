@@ -65,8 +65,17 @@ class BranchingNovelApp(tk.Tk):
         self._build_ui()
         self._bind_events()
 
-        # 시작 챕터로 이동
-        self._reset_to_start()
+        self._autosave_path = self._get_autosave_path()
+        self._autosave_job: Optional[str] = None
+        if self._autosave_path.exists():
+            if messagebox.askyesno(tr("resume_autosave_title"), tr("resume_autosave_prompt")):
+                self._load_progress(str(self._autosave_path))
+            else:
+                self._reset_to_start()
+        else:
+            self._reset_to_start()
+        self._save_progress(str(self._autosave_path))
+        self._schedule_autosave()
 
     def _load_theme(self, name: str = "default") -> Tuple[Dict[str, Any], Path]:
         """Load theme configuration from the app data 'themes' folder.
@@ -154,7 +163,22 @@ class BranchingNovelApp(tk.Tk):
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 
-    def _save_progress(self) -> None:
+    def _get_autosave_path(self) -> Path:
+        title = self._sanitize_filename(self._interpolate(self.story.title))
+        directory = get_app_data_dir() / title
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory / "autosave.json"
+
+    def _schedule_autosave(self):
+        if self._autosave_job:
+            self.after_cancel(self._autosave_job)
+        self._autosave_job = self.after(60000, self._periodic_autosave)
+
+    def _periodic_autosave(self):
+        self._save_progress(str(self._autosave_path))
+        self._schedule_autosave()
+
+    def _save_progress(self, path: Optional[str] = None) -> None:
         hist_data: List[Dict[str, Any]] = []
         for step in self.history:
             hist_data.append({
@@ -168,44 +192,46 @@ class BranchingNovelApp(tk.Tk):
             "current_index": self.current_index,
             "state": self.state,
         }
-        save_dir = self._save_directory()
-        game_title = self._sanitize_filename(self._interpolate(self.story.title))
-        chapter_title = ""
-        br = self._current_branch()
-        if br:
-            ch = self.story.get_chapter(br.chapter_id)
-            if ch and ch.title:
-                chapter_title = self._sanitize_filename(self._interpolate(ch.title))
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        parts = [game_title]
-        if chapter_title:
-            parts.append(chapter_title)
-        parts.append(timestamp)
-        filename = "-".join(parts) + ".json"
-        path = filedialog.asksaveasfilename(
-            title="Save Progress",
-            defaultextension=".json",
-            filetypes=[("JSON Files", "*.json"), ("All Files", "*")],
-            initialdir=save_dir,
-            initialfile=filename,
-        )
-        if not path:
-            return
+        if path is None:
+            save_dir = self._save_directory()
+            game_title = self._sanitize_filename(self._interpolate(self.story.title))
+            chapter_title = ""
+            br = self._current_branch()
+            if br:
+                ch = self.story.get_chapter(br.chapter_id)
+                if ch and ch.title:
+                    chapter_title = self._sanitize_filename(self._interpolate(ch.title))
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            parts = [game_title]
+            if chapter_title:
+                parts.append(chapter_title)
+            parts.append(timestamp)
+            filename = "-".join(parts) + ".json"
+            path = filedialog.asksaveasfilename(
+                title="Save Progress",
+                defaultextension=".json",
+                filetypes=[("JSON Files", "*.json"), ("All Files", "*")],
+                initialdir=save_dir,
+                initialfile=filename,
+            )
+            if not path:
+                return
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except OSError as e:
             messagebox.showerror(tr("error"), str(e))
 
-    def _load_progress(self) -> None:
-        path = filedialog.askopenfilename(
-            title="Load Progress",
-            defaultextension=".json",
-            filetypes=[("JSON Files", "*.json"), ("All Files", "*")],
-            initialdir=self._save_directory(),
-        )
-        if not path:
-            return
+    def _load_progress(self, path: Optional[str] = None) -> None:
+        if path is None:
+            path = filedialog.askopenfilename(
+                title="Load Progress",
+                defaultextension=".json",
+                filetypes=[("JSON Files", "*.json"), ("All Files", "*")],
+                initialdir=self._save_directory(),
+            )
+            if not path:
+                return
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -352,6 +378,11 @@ class BranchingNovelApp(tk.Tk):
         if self._marquee_job:
             self.after_cancel(self._marquee_job)
             self._marquee_job = None
+        if hasattr(self, "_autosave_job") and self._autosave_job:
+            self.after_cancel(self._autosave_job)
+            self._autosave_job = None
+        if hasattr(self, "_autosave_path"):
+            self._save_progress(str(self._autosave_path))
         self.destroy()
 
     def _populate_chapter_list(self):

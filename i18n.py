@@ -228,6 +228,8 @@ _STRINGS = {
         'definition_witnessed': '- Witnessed: Repeatedly reached by following internal transitions with actual values',
         'definition_possible': '- Possible: There is a cycle, but external escape may open depending on conditions',
         'language_change_restart': 'Language saved. Restart app to apply.',
+        'resume_autosave_title': 'Resume',
+        'resume_autosave_prompt': 'Autosave found. Resume?',
         'close': 'Close',
     },
     'korean': {
@@ -380,6 +382,8 @@ _STRINGS = {
         'definition_witnessed': '- 증거: 실제 값으로 내부만 따라가 반복 도달 확인',
         'definition_possible': '- 가능: 순환은 있으나 외부 탈출이 조건에 따라 열릴 수 있음',
         'language_change_restart': '언어가 저장되었습니다. 적용하려면 재시작하세요.',
+        'resume_autosave_title': '이어하기',
+        'resume_autosave_prompt': '자동 저장된 내용을 이어서 하시겠습니까?',
         'close': '닫기',
     },
 }
