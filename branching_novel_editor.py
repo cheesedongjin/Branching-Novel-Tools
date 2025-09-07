@@ -2004,10 +2004,15 @@ class ChapterEditor(tk.Tk):
         if not self._apply_preview_to_model():
             return
         self._apply_body_to_model()
-        if self.dirty:
-            # 모델 변경 사항이 있을 경우 미리보기를 강제로 갱신하여 일관성 유지
-            self._update_preview(force=True)
         txt = self.txt_preview.get("1.0", tk.END).rstrip("\n")
+        if self.dirty:
+            parser = StoryParser()
+            serialized = self.story.serialize()
+            clean_preview = "\n".join(parser._remove_comments(txt.splitlines())).rstrip()
+            if clean_preview != serialized:
+                # 본문에서 변경된 내용이 있다면 미리보기 갱신이 필요
+                self._update_preview(force=True)
+                txt = self.txt_preview.get("1.0", tk.END).rstrip("\n")
         try:
             with open(self.current_file, "w", encoding="utf-8") as f:
                 f.write(txt + "\n")
@@ -2029,9 +2034,14 @@ class ChapterEditor(tk.Tk):
         )
         if not path:
             return
-        if self.dirty:
-            self._update_preview(force=True)
         txt = self.txt_preview.get("1.0", tk.END).rstrip("\n")
+        if self.dirty:
+            parser = StoryParser()
+            serialized = self.story.serialize()
+            clean_preview = "\n".join(parser._remove_comments(txt.splitlines())).rstrip()
+            if clean_preview != serialized:
+                self._update_preview(force=True)
+                txt = self.txt_preview.get("1.0", tk.END).rstrip("\n")
         try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(txt + "\n")
