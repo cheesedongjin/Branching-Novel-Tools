@@ -50,20 +50,30 @@ LANG = _load_lang_from_file(_DEFAULT_LANG_FILE)
 
 
 def _load_locale_strings(lang: str) -> None:
-    """Load locale from the app data 'locales' folder and merge with defaults."""
+    """Load locale strings from default, bundled, and user locales."""
     base = _STRINGS.get(_DEFAULT_LANG, {}).copy()
     base.update(_STRINGS.get(lang, {}))
 
-    path = _LOCALE_DIR / f"{lang}.json"
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, dict):
-                base.update(data)
-    except OSError:
-        pass
-    except json.JSONDecodeError:
-        pass
+    # Directories to search for locale overrides. First check for a bundled
+    # `locales` directory next to the executable, then fall back to the user
+    # app data directory.
+    if getattr(sys, "frozen", False):  # PyInstaller or similar
+        exe_dir = Path(sys.executable).resolve().parent
+    else:
+        exe_dir = Path(__file__).resolve().parent
+    search_dirs = [exe_dir / "locales", _LOCALE_DIR]
+
+    for directory in search_dirs:
+        path = directory / f"{lang}.json"
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    base.update(data)
+        except OSError:
+            continue
+        except json.JSONDecodeError:
+            continue
 
     _STRINGS[lang] = base
 

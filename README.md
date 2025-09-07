@@ -98,3 +98,11 @@ You wake up with __coins__ coins.
 ```
 python branching_novel.py path/to/story.bnov
 ```
+
+## Localization
+
+Interface strings are loaded from JSON files located in a `locales` directory
+next to the executable. To add a new language, drop a file named
+`<lang>.json` in this folder containing translated key/value pairs. For
+example, placing `locales/fr.json` alongside the program enables French
+translations.
