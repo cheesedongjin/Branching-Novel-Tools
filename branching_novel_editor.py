@@ -65,13 +65,33 @@ def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) 
 
     text = widget.get("1.0", "end-1c")
 
-    # 주석 처리: 세미콜론으로 시작하는 줄을 회색으로 표시
+    # 주석 처리: 일반/블록/줄 옆 주석 모두 회색으로 표시
     start = 0
+    in_block = False
     for line in text.splitlines(True):
-        stripped = line.lstrip()
-        if stripped.startswith(";"):
-            widget.tag_add("comment", f"1.0+{start}c", f"1.0+{start + len(line)}c")
+        stripped = line.strip()
+        lstripped = line.lstrip()
+        line_start = f"1.0+{start}c"
+        line_end = f"1.0+{start + len(line)}c"
+
+        if in_block:
+            widget.tag_add("comment", line_start, line_end)
+            if stripped == ";":
+                in_block = False
+            start += len(line)
+            continue
+
+        if stripped == ";":
+            in_block = True
+            widget.tag_add("comment", line_start, line_end)
+        elif lstripped.startswith(";"):
+            widget.tag_add("comment", line_start, line_end)
+        else:
+            idx = line.find(";")
+            if idx != -1:
+                widget.tag_add("comment", f"1.0+{start + idx}c", line_end)
         start += len(line)
+
     widget.tag_configure("comment", foreground="gray")
 
     vars_set = set(get_vars()) if get_vars else set()
