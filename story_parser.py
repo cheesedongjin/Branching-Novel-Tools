@@ -166,9 +166,52 @@ class ParseError(Exception):
     pass
 
 class StoryParser:
+    def _strip_inline_comment(self, line: str) -> str:
+        in_brace = 0
+        in_quote: Optional[str] = None
+        for i, ch in enumerate(line):
+            if in_quote:
+                if ch == in_quote:
+                    in_quote = None
+                continue
+            if ch in ('"', "'"):
+                in_quote = ch
+                continue
+            if ch == '{':
+                in_brace += 1
+            elif ch == '}':
+                if in_brace:
+                    in_brace -= 1
+            elif ch == ';' and in_brace == 0:
+                if i > 0 and line[i - 1].isspace():
+                    return line[:i].rstrip()
+        return line.rstrip()
+
+    def _remove_comments(self, lines: List[str]) -> List[str]:
+        result: List[str] = []
+        i = 0
+        in_block = False
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+            if stripped == ';':
+                in_block = not in_block
+                i += 1
+                continue
+            if in_block:
+                i += 1
+                continue
+            if stripped.startswith(';'):
+                i += 1
+                continue
+            result.append(self._strip_inline_comment(line))
+            i += 1
+        return result
+
     def parse(self, text: str) -> Story:
         text = text.lstrip("\ufeff")
         lines = [ln.lstrip("\ufeff") for ln in text.splitlines()]
+        lines = self._remove_comments(lines)
         story = Story()
         current_chapter: Optional[Chapter] = None
         current_branch: Optional[Branch] = None
