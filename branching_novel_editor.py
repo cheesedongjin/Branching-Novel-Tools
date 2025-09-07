@@ -1878,13 +1878,13 @@ class ChapterEditor(tk.Tk):
         # numeric-only operator vs non-numeric variable check
         var_types: Dict[str, Set[type]] = {}
         for name, val in self.story.variables.items():
-            var_types.setdefault(name, set()).add(int if isinstance(val, bool) else type(val))
+            var_types.setdefault(name, set()).add(type(val))
         for br in self.story.branches.values():
             for act in br.actions:
                 if act.op == "expr":
                     # Expression results are dynamic; skip type inference to avoid false positives
                     continue
-                val_type = int if isinstance(act.value, bool) else type(act.value)
+                val_type = type(act.value)
                 var_types.setdefault(act.var, set()).add(val_type)
         numeric_ops = {"add", "sub", "mul", "div", "floordiv", "mod", "pow"}
         warned = set()
@@ -2137,8 +2137,6 @@ class ChapterEditor(tk.Tk):
         BIG = 1e18
 
         def as_point(v):
-            if isinstance(v, bool):
-                v = int(v)
             return (float(v), float(v))
 
         def join_interval(a, b):
@@ -2283,8 +2281,6 @@ class ChapterEditor(tk.Tk):
                 var = act.var
                 cur = st.get(var, as_point(0.0))
                 val = act.value
-                if isinstance(val, bool):
-                    val = int(val)
                 if not isinstance(val, (int, float)):
                     st[var] = widen_unknown(cur)
                     continue
@@ -2306,8 +2302,6 @@ class ChapterEditor(tk.Tk):
                 var = act.var
                 a = v.get(var, 0.0)
                 b = act.value
-                if isinstance(b, bool):
-                    b = int(b)
                 if not isinstance(b, (int, float)):
                     v[var] = float('nan')
                     continue
@@ -2353,7 +2347,7 @@ class ChapterEditor(tk.Tk):
             edges[bid] = lst
 
         # 2) 고정점 전파(가드로 필터)
-        initial = {k: as_point(int(v) if isinstance(v, bool) else v) for k, v in story.variables.items()}
+        initial = {k: as_point(v) for k, v in story.variables.items()}
         pre_state = {bid: None for bid in branches.keys()}
         post_state = {bid: None for bid in branches.keys()}
 
