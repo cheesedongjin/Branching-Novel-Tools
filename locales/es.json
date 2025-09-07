@@ -1,0 +1,14 @@
+{
+    "warning": "Advertencia",
+    "error": "Error",
+    "start_over": "Comenzar de nuevo",
+    "reset_warning": "Todo el progreso se perderá.\n¿Reiniciar desde el principio?",
+    "exit": "Salir",
+    "ok": "Aceptar",
+    "cancel": "Cancelar",
+    "add": "Añadir",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "open": "Abrir",
+    "save": "Guardar"
+}
