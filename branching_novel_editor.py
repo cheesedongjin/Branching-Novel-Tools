@@ -1777,6 +1777,34 @@ class ChapterEditor(tk.Tk):
         self._build_find_results(query, self.find_scope.get())
         self._find_step(1)
 
+    def _merge_comments(self, original: str, updated: str) -> str:
+        parser = StoryParser()
+        orig_lines = original.splitlines()
+        upd_lines = updated.splitlines()
+        comments_before: Dict[int, List[str]] = {}
+        inline_comments: Dict[int, str] = {}
+        buffer: List[str] = []
+        idx = 0
+        for line in orig_lines:
+            stripped = line.strip()
+            if stripped.startswith(';'):
+                buffer.append(line)
+            else:
+                base = parser._strip_inline_comment(line)
+                comment_part = line[len(base):]
+                comments_before[idx] = buffer
+                inline_comments[idx] = comment_part
+                buffer = []
+                idx += 1
+        trailing = buffer
+
+        merged: List[str] = []
+        for i, line in enumerate(upd_lines):
+            merged.extend(comments_before.get(i, []))
+            merged.append(line + inline_comments.get(i, ""))
+        merged.extend(trailing)
+        return "\n".join(merged)
+
     def _update_preview(self, force: bool = False):
         # 사용자가 미리보기를 수정했을 때는 기본 덮어쓰기를 막는다.
         # 단, 의도적으로 버리기/강제 동기화가 필요할 땐 force=True로 호출.
@@ -1788,8 +1816,7 @@ class ChapterEditor(tk.Tk):
         parser = StoryParser()
         serialized = self.story.serialize().rstrip()
         current = self.txt_preview.get("1.0", tk.END).rstrip("\n")
-        clean_current = "\n".join(parser._remove_comments(current.splitlines())).rstrip()
-        txt = current if clean_current == serialized else serialized
+        txt = serialized if force else self._merge_comments(current, serialized)
 
         self._preview_updating = True
         try:
