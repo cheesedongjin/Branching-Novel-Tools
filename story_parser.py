@@ -183,8 +183,7 @@ class StoryParser:
                 if in_brace:
                     in_brace -= 1
             elif ch == ';' and in_brace == 0:
-                if i > 0 and line[i - 1].isspace():
-                    return line[:i].rstrip()
+                return line[:i].rstrip()
         return line.rstrip()
 
     def _remove_comments(self, lines: List[str]) -> List[str]:
