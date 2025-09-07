@@ -1977,7 +1977,15 @@ class ChapterEditor(tk.Tk):
             if self.current_branch_id:
                 self._load_branch_to_form(self.current_branch_id)
         self._refresh_meta_panel()
-        self._update_preview()
+        # Preserve original comments by using the raw text in the preview
+        self._preview_updating = True
+        try:
+            self.txt_preview.delete("1.0", tk.END)
+            self.txt_preview.insert(tk.END, text)
+            self.txt_preview.edit_modified(False)
+        finally:
+            self._preview_updating = False
+        self.preview_modified = False
         self._set_dirty(False)
         self.undo_manager = UndoManager(self._capture_state, self._restore_state)
         self.title(f"Branching Novel Editor - {os.path.basename(path)}")
@@ -1990,7 +1998,10 @@ class ChapterEditor(tk.Tk):
         if not self._apply_preview_to_model():
             return
         self._apply_body_to_model()
-        txt = self.story.serialize()
+        if self.dirty:
+            # 모델 변경 사항이 있을 경우 미리보기를 강제로 갱신하여 일관성 유지
+            self._update_preview(force=True)
+        txt = self.txt_preview.get("1.0", tk.END).rstrip("\n")
         try:
             with open(self.current_file, "w", encoding="utf-8") as f:
                 f.write(txt + "\n")
@@ -2008,11 +2019,13 @@ class ChapterEditor(tk.Tk):
             title=tr("save_as_title"),
             defaultextension=".bnov",
             filetypes=[("Branching Novel Files","*.bnov"),("All Files","*.*")],
-            initialfile="story.bnov"
+            initialfile="story.bnov",
         )
         if not path:
             return
-        txt = self.story.serialize()
+        if self.dirty:
+            self._update_preview(force=True)
+        txt = self.txt_preview.get("1.0", tk.END).rstrip("\n")
         try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(txt + "\n")
@@ -2023,7 +2036,6 @@ class ChapterEditor(tk.Tk):
         self._set_dirty(False)
         self.title(f"Branching Novel Editor - {os.path.basename(path)}")
         messagebox.showinfo(tr("save_title"), tr("save_done"))
-
     def _exit_app(self):
         # 1) 미리보기에서 수정한 내용이 있으면 먼저 처리(반영 or 폐기)
         if not self._ensure_preview_applied():
