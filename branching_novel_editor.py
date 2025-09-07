@@ -1799,10 +1799,25 @@ class ChapterEditor(tk.Tk):
         trailing = buffer
 
         merged: List[str] = []
-        for i, line in enumerate(upd_lines):
-            merged.extend(comments_before.get(i, []))
-            merged.append(line + inline_comments.get(i, ""))
-        merged.extend(trailing)
+        recent_comments: List[str] = []
+        idx = 0  # index for non-comment lines
+        for line in upd_lines:
+            stripped = line.strip()
+            if stripped.startswith(';'):
+                merged.append(line)
+                recent_comments.append(line)
+            else:
+                existing = set(recent_comments)
+                for c in comments_before.get(idx, []):
+                    if c not in existing:
+                        merged.append(c)
+                merged.append(line + inline_comments.get(idx, ""))
+                recent_comments = []
+                idx += 1
+        if trailing:
+            for c in trailing:
+                if c not in recent_comments:
+                    merged.append(c)
         return "\n".join(merged)
 
     def _update_preview(self, force: bool = False):
