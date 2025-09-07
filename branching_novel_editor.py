@@ -50,6 +50,9 @@ APP_NAME = "Branching Novel Editor"
 INSTALLER_NAME = "BranchingNovelEditor-Online-Setup.exe"
 APP_ID = "667FEBC7-64DB-446E-97B5-E6886D5E4660"
 
+COMPARISON_OPERATORS = ["==", "!=", ">", "<", ">=", "<="]
+ASSIGNMENT_OPERATORS = ["=", "+=", "-=", "*=", "/=", "//=", "%=", "**="]
+
 
 def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) -> None:
     """Highlight ``__var__`` placeholders referencing defined variables.
@@ -163,7 +166,13 @@ class UndoManager:
         self._set_state(copy.deepcopy(state))
 
 class ConditionRowDialog(tk.Toplevel):
-    def __init__(self, master, variables: List[str], initial: Optional[Tuple[str, str, str]]):
+    def __init__(
+        self,
+        master,
+        variables: List[str],
+        initial: Optional[Tuple[str, str, str]],
+        operators: List[str],
+    ):
         super().__init__(master)
         self.title(tr("condition_action_title"))
         self.resizable(False, False)
@@ -178,8 +187,7 @@ class ConditionRowDialog(tk.Toplevel):
         self.cmb_var.grid(row=1, column=0, sticky="ew", pady=(0,8))
 
         ttk.Label(frm, text=tr("operator")).grid(row=0, column=1, sticky="w", padx=(8,0))
-        ops = ["==", "!=", ">", "<", ">=", "<=", "=", "+=", "-=", "*=", "/=", "//=", "%=", "**="]
-        self.cmb_op = ttk.Combobox(frm, values=ops, state="readonly", width=7)
+        self.cmb_op = ttk.Combobox(frm, values=operators, state="readonly", width=7)
         self.cmb_op.grid(row=1, column=1, sticky="w", padx=(8,0))
 
         ttk.Label(frm, text=tr("value")).grid(row=0, column=2, sticky="w", padx=(8,0))
@@ -207,6 +215,7 @@ class ConditionRowDialog(tk.Toplevel):
         else:
             if variables:
                 self.cmb_var.current(0)
+            if operators:
                 self.cmb_op.current(0)
 
         self.bind("<Return>", lambda e: self._ok())
@@ -382,7 +391,7 @@ class ActionDialog(tk.Toplevel):
             self.tree.insert("", tk.END, values=(var, op, val))
 
     def _add(self):
-        dlg = ConditionRowDialog(self, self.variables, None)
+        dlg = ConditionRowDialog(self, self.variables, None, ASSIGNMENT_OPERATORS)
         if dlg.result_ok and dlg.condition:
             self.actions_raw.append(dlg.condition)
             self._refresh_tree()
@@ -392,7 +401,7 @@ class ActionDialog(tk.Toplevel):
         if not sel:
             return
         idx = self.tree.index(sel[0])
-        dlg = ConditionRowDialog(self, self.variables, self.actions_raw[idx])
+        dlg = ConditionRowDialog(self, self.variables, self.actions_raw[idx], ASSIGNMENT_OPERATORS)
         if dlg.result_ok and dlg.condition:
             self.actions_raw[idx] = dlg.condition
             self._refresh_tree()
@@ -524,7 +533,7 @@ class ConditionDialog(tk.Toplevel):
     def _add_condition(self):
         sel = self.tree.selection()
         parent = sel[0] if sel and self.tree.set(sel[0], "kind") == "op" else self.tree.parent(sel[0]) if sel else self.root_item
-        dlg = ConditionRowDialog(self, self.variables, None)
+        dlg = ConditionRowDialog(self, self.variables, None, COMPARISON_OPERATORS)
         if dlg.result_ok and dlg.condition:
             expr = f"{dlg.condition[0]} {dlg.condition[1]} {dlg.condition[2]}"
             self.tree.insert(parent, tk.END, text=expr, values=("cond", expr))
@@ -543,9 +552,9 @@ class ConditionDialog(tk.Toplevel):
         kind = self.tree.set(item, "kind")
         if kind == "cond":
             expr = self.tree.set(item, "expr")
-            m = re.match(r"(\w+)\s*(==|!=|>=|<=|>|<|=|\+=|-=|\*=|/=|//=|%=|\*\*=)\s*(.+)", expr)
+            m = re.match(r"(\w+)\s*(==|!=|>=|<=|>|<)\s*(.+)", expr)
             initial = m.groups() if m else None
-            dlg = ConditionRowDialog(self, self.variables, initial)
+            dlg = ConditionRowDialog(self, self.variables, initial, COMPARISON_OPERATORS)
             if dlg.result_ok and dlg.condition:
                 expr = f"{dlg.condition[0]} {dlg.condition[1]} {dlg.condition[2]}"
                 self.tree.item(item, text=expr, values=("cond", expr))
