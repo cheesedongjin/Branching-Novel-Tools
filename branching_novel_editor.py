@@ -1289,7 +1289,13 @@ class ChapterEditor(tk.Tk):
             return
         br = self.story.branches[self.current_branch_id]
         raw = self.txt_body.get("1.0", tk.END).rstrip("\n")
-        paras = [p.strip() for p in raw.split("\n\n")]
+        lines = raw.splitlines()
+        parser = StoryParser()
+        # Remove comment lines and inline comments so they don't appear
+        # when running the preview or game.
+        lines = parser._remove_comments(lines)
+        cleaned = "\n".join(lines)
+        paras = [p.strip() for p in cleaned.split("\n\n")]
         paras = [p for p in paras if p != ""]
         br.paragraphs = paras
 
