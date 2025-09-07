@@ -1756,17 +1756,25 @@ class ChapterEditor(tk.Tk):
         inline_comments: Dict[int, str] = {}
         buffer: List[str] = []
         idx = 0
+        in_block = False
         for line in orig_lines:
             stripped = line.strip()
+            if stripped == ';':
+                buffer.append(line)
+                in_block = not in_block
+                continue
+            if in_block:
+                buffer.append(line)
+                continue
             if stripped.startswith(';'):
                 buffer.append(line)
-            else:
-                base = parser._strip_inline_comment(line)
-                comment_part = line[len(base):]
-                comments_before[idx] = buffer
-                inline_comments[idx] = comment_part
-                buffer = []
-                idx += 1
+                continue
+            base = parser._strip_inline_comment(line)
+            comment_part = line[len(base):]
+            comments_before[idx] = buffer
+            inline_comments[idx] = comment_part
+            buffer = []
+            idx += 1
         trailing = buffer
 
         merged: List[str] = []
