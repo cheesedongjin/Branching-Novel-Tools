@@ -72,8 +72,11 @@ Conditions and expressions support:
   other tests are combined with `and`, each part runs from left to right and
   all non-assignment expressions must evaluate to true.
 
-Lines starting with `;` are treated as comments and ignored. Empty lines still
-serve only as paragraph separators.
+Lines starting with `;` are treated as comments and ignored. A line containing
+only `;` begins a block comment that continues until another lone `;` line is
+encountered. Inline comments can also follow any statement when `;` appears
+after some whitespace; everything to the right of the semicolon is ignored.
+Empty lines still serve only as paragraph separators.
 
 ## Example
 
@@ -82,7 +85,10 @@ serve only as paragraph separators.
 @start: intro
 @show-disabled: true
 ! coins = 5
-; This is a comment line
+! gems = 1      ; This is a side comment
+;
+This whole block is ignored
+;
 
 @chapter intro: Prologue
 # intro
