@@ -39,6 +39,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from i18n import tr, set_language, set_language_from_file, get_user_lang_file
 from typing import Any, List, Dict, Optional, Callable, Iterable, Tuple, Union, Set
+import copy
 
 from auto_update import check_for_update
 from story_parser import Choice, Action, Branch, Chapter, Story, ParseError, StoryParser
@@ -111,6 +112,35 @@ def highlight_variables(widget: tk.Text, get_vars: Callable[[], Iterable[str]]) 
 
 
 # ---------- 에디터 GUI ----------
+
+
+class UndoManager:
+    """Simple undo/redo manager storing deep copies of editor state."""
+
+    def __init__(self, get_state: Callable[[], Any], set_state: Callable[[Any], None]):
+        self._get_state = get_state
+        self._set_state = set_state
+        self._undo_stack: List[Any] = [copy.deepcopy(self._get_state())]
+        self._redo_stack: List[Any] = []
+
+    def record(self) -> None:
+        """Record a new state for undo."""
+        self._undo_stack.append(copy.deepcopy(self._get_state()))
+        self._redo_stack.clear()
+
+    def undo(self) -> None:
+        if len(self._undo_stack) <= 1:
+            return
+        state = self._undo_stack.pop()
+        self._redo_stack.append(state)
+        self._set_state(copy.deepcopy(self._undo_stack[-1]))
+
+    def redo(self) -> None:
+        if not self._redo_stack:
+            return
+        state = self._redo_stack.pop()
+        self._undo_stack.append(state)
+        self._set_state(copy.deepcopy(state))
 
 class ConditionRowDialog(tk.Toplevel):
     def __init__(self, master, variables: List[str], initial: Optional[Tuple[str, str, str]]):
@@ -365,6 +395,7 @@ class ActionDialog(tk.Toplevel):
             editor._set_dirty(True)
             editor._refresh_variable_list()
             editor._update_preview()
+            editor.undo_manager.record()
 
     def _ok(self):
         self.action_str = "; ".join(f"{v} {op} {val}" for v, op, val in self.actions_raw)
@@ -729,6 +760,8 @@ class ChapterEditor(tk.Tk):
         self._var_drop_targets: set[tk.Widget] = set()
         self._preview_updating: bool = False
 
+        self.undo_manager = UndoManager(self._capture_state, self._restore_state)
+
         self._build_menu()
         self._build_ui()
         self._refresh_chapter_list()
@@ -746,6 +779,22 @@ class ChapterEditor(tk.Tk):
         # 창 닫힘 이벤트에 종료 처리 연결
         self.protocol("WM_DELETE_WINDOW", self._exit_app)
 
+    def _capture_state(self):
+        return {
+            "story": copy.deepcopy(self.story),
+            "current_chapter_id": self.current_chapter_id,
+            "current_branch_id": self.current_branch_id,
+        }
+
+    def _restore_state(self, state: Dict[str, Any]):
+        self.story = copy.deepcopy(state["story"])
+        self.current_chapter_id = state["current_chapter_id"]
+        self.current_branch_id = state["current_branch_id"]
+        self._refresh_chapter_list()
+        if self.current_chapter_id:
+            self._load_chapter_to_form(self.current_chapter_id)
+        self._set_dirty(True)
+
     # ---------- UI 구성 ----------
     def _build_menu(self):
         m = tk.Menu(self)
@@ -760,6 +809,9 @@ class ChapterEditor(tk.Tk):
         m.add_cascade(label=tr("file_menu"), menu=fm)
 
         em = tk.Menu(m, tearoff=0)
+        em.add_command(label=tr("undo"), command=self.undo_manager.undo, accelerator="Ctrl+Z")
+        em.add_command(label=tr("redo"), command=self.undo_manager.redo, accelerator="Ctrl+Y")
+        em.add_separator()
         em.add_command(label=tr("add_chapter"), command=self._add_chapter, accelerator="Ctrl+Shift+A")
         em.add_command(label=tr("delete_chapter"), command=self._delete_current_chapter, accelerator="Del")
         em.add_separator()
@@ -779,6 +831,8 @@ class ChapterEditor(tk.Tk):
         self.bind_all("<Delete>", lambda e: self._delete_current_chapter())
         self.bind_all("<Control-Shift-A>", lambda e: self._add_chapter())
         self.bind_all("<Control-f>", lambda e: self._open_find_window())
+        self.bind_all("<Control-z>", lambda e: self.undo_manager.undo())
+        self.bind_all("<Control-y>", lambda e: self.undo_manager.redo())
 
     def _change_language(self, lang: str) -> None:
         set_language(lang)
@@ -1085,6 +1139,7 @@ class ChapterEditor(tk.Tk):
         self.story.title = text.strip() or "Untitled"
         self._set_dirty(True)
         self._update_preview()
+        self.undo_manager.record()
 
     def _on_start_changed(self):
         sid = self.cmb_start.get().strip()
@@ -1092,16 +1147,19 @@ class ChapterEditor(tk.Tk):
             self.story.start_id = sid
             self._set_dirty(True)
             self._update_preview()
+            self.undo_manager.record()
 
     def _on_ending_changed(self):
         self.story.ending_text = self.ent_end.get().strip() or "The End"
         self._set_dirty(True)
         self._update_preview()
+        self.undo_manager.record()
 
     def _on_show_disabled_changed(self):
         self.story.show_disabled = self.var_show_disabled.get()
         self._set_dirty(True)
         self._update_preview()
+        self.undo_manager.record()
 
     def _on_select_chapter(self):
         sel = self.lst_chapters.curselection()
@@ -1131,6 +1189,7 @@ class ChapterEditor(tk.Tk):
             self._set_dirty(True)
             self._apply_body_to_model()
             self._update_preview()
+            self.undo_manager.record()
 
     def _on_preview_modified(self, evt):
         if self.txt_preview.edit_modified():
@@ -1240,6 +1299,7 @@ class ChapterEditor(tk.Tk):
         self._refresh_chapter_list()
         self._set_dirty(True)
         self._update_preview()
+        self.undo_manager.record()
 
     def _apply_branch_id_title(self):
         if self.current_branch_id is None:
@@ -1275,6 +1335,7 @@ class ChapterEditor(tk.Tk):
         self._refresh_meta_panel()
         self._set_dirty(True)
         self._update_preview()
+        self.undo_manager.record()
 
     def _refresh_chapter_list(self):
         self.lst_chapters.delete(0, tk.END)
@@ -1329,6 +1390,7 @@ class ChapterEditor(tk.Tk):
         self._refresh_chapter_list()
         self._load_chapter_to_form(new_cid)
         self._set_dirty(True)
+        self.undo_manager.record()
 
     def _delete_current_chapter(self):
         if self.current_chapter_id is None:
@@ -1358,6 +1420,7 @@ class ChapterEditor(tk.Tk):
             if self.current_chapter_id and self.current_branch_id:
                 self._load_chapter_to_form(self.current_chapter_id)
             self._set_dirty(True)
+            self.undo_manager.record()
 
     def _reorder_chapter(self, delta: int):
         if self.current_chapter_id is None:
@@ -1375,6 +1438,7 @@ class ChapterEditor(tk.Tk):
         self.story.chapters = reordered
         self._refresh_chapter_list()
         self._set_dirty(True)
+        self.undo_manager.record()
 
     def _add_branch(self):
         if self.current_chapter_id is None:
@@ -1388,6 +1452,7 @@ class ChapterEditor(tk.Tk):
         self._refresh_branch_list()
         self._load_branch_to_form(new_id)
         self._set_dirty(True)
+        self.undo_manager.record()
 
     def _delete_current_branch(self):
         if self.current_branch_id is None or self.current_chapter_id is None:
@@ -1407,6 +1472,7 @@ class ChapterEditor(tk.Tk):
             self._refresh_branch_list()
             self._load_branch_to_form(next_bid)
             self._set_dirty(True)
+            self.undo_manager.record()
 
     def _reorder_branch(self, delta: int):
         if self.current_branch_id is None or self.current_chapter_id is None:
@@ -1424,6 +1490,7 @@ class ChapterEditor(tk.Tk):
         ch.branches = reordered
         self._refresh_branch_list()
         self._set_dirty(True)
+        self.undo_manager.record()
 
     def _collect_variables(self) -> List[str]:
         vars_set = set(self.story.variables.keys())
@@ -1454,6 +1521,7 @@ class ChapterEditor(tk.Tk):
             self._refresh_variable_list()
             self._set_dirty(True)
             self._update_preview()
+            self.undo_manager.record()
 
     def _edit_variable(self):
         sel = self.tree_vars.selection()
@@ -1472,6 +1540,7 @@ class ChapterEditor(tk.Tk):
             self._refresh_variable_list()
             self._set_dirty(True)
             self._update_preview()
+            self.undo_manager.record()
 
     def _delete_variable(self):
         sel = self.tree_vars.selection()
@@ -1483,6 +1552,7 @@ class ChapterEditor(tk.Tk):
             self._refresh_variable_list()
             self._set_dirty(True)
             self._update_preview()
+            self.undo_manager.record()
 
     def _add_choice(self):
         if self.current_branch_id is None:
@@ -1496,6 +1566,7 @@ class ChapterEditor(tk.Tk):
             self.tree_choices.insert("", tk.END, values=(dlg.choice.text, dlg.choice.target_id))
             self._set_dirty(True)
             self._update_preview()
+            self.undo_manager.record()
 
     def _edit_choice(self):
         sel = self.tree_choices.selection()
@@ -1512,6 +1583,7 @@ class ChapterEditor(tk.Tk):
             self.tree_choices.item(sel[0], values=(dlg.choice.text, dlg.choice.target_id))
             self._set_dirty(True)
             self._update_preview()
+            self.undo_manager.record()
 
     def _delete_choice(self):
         sel = self.tree_choices.selection()
@@ -1523,6 +1595,7 @@ class ChapterEditor(tk.Tk):
         self.tree_choices.delete(sel[0])
         self._set_dirty(True)
         self._update_preview()
+        self.undo_manager.record()
 
     def _reorder_choice(self, delta: int):
         sel = self.tree_choices.selection()
@@ -1541,6 +1614,7 @@ class ChapterEditor(tk.Tk):
         self.tree_choices.selection_set(self.tree_choices.get_children()[new_idx])
         self._set_dirty(True)
         self._update_preview()
+        self.undo_manager.record()
 
     # ---------- 찾기/변경 ----------
     def _open_find_window(self):
@@ -1717,6 +1791,8 @@ class ChapterEditor(tk.Tk):
         # 미리보기 텍스트의 수정 플래그 초기화
         self.txt_preview.edit_modified(False)
         self.preview_modified = False
+        self._set_dirty(True)
+        self.undo_manager.record()
         return True
 
     def _run_preview(self):
@@ -1847,6 +1923,7 @@ class ChapterEditor(tk.Tk):
         self._refresh_meta_panel()
         self._update_preview()
         self._set_dirty(False)
+        self.undo_manager = UndoManager(self._capture_state, self._restore_state)
 
     def _open_file(self):
         if not self._confirm_discard_changes():
@@ -1882,6 +1959,7 @@ class ChapterEditor(tk.Tk):
         self._refresh_meta_panel()
         self._update_preview()
         self._set_dirty(False)
+        self.undo_manager = UndoManager(self._capture_state, self._restore_state)
         self.title(f"Branching Novel Editor - {os.path.basename(path)}")
         self._validate_story(auto=True)
 
