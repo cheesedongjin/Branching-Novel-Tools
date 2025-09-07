@@ -1280,7 +1280,9 @@ class ChapterEditor(tk.Tk):
 
         self.txt_body.config(state="normal")
         self.txt_body.delete("1.0", tk.END)
-        if br.paragraphs:
+        if br.raw_text:
+            self.txt_body.insert(tk.END, br.raw_text)
+        elif br.paragraphs:
             self.txt_body.insert(tk.END, "\n\n".join(br.paragraphs))
         highlight_variables(self.txt_body, lambda: self._collect_variables())
         self.txt_body.edit_modified(False)
@@ -1298,6 +1300,7 @@ class ChapterEditor(tk.Tk):
             return
         br = self.story.branches[self.current_branch_id]
         raw = self.txt_body.get("1.0", tk.END).rstrip("\n")
+        br.raw_text = raw
         lines = raw.splitlines()
         parser = StoryParser()
         # Remove comment lines and inline comments so they don't appear

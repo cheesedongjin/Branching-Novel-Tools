@@ -28,6 +28,7 @@ class Branch:
     paragraphs: List[str] = field(default_factory=list)
     choices: List[Choice] = field(default_factory=list)
     actions: List[Action] = field(default_factory=list)
+    raw_text: str = ""
     line: int = 0
     source: str = ""
 
@@ -105,9 +106,14 @@ class Story:
             for bid, br in ch.branches.items():
                 br_header = f"# {br.branch_id}: {br.title}" if br.title else f"# {br.branch_id}"
                 lines.append(br_header)
-                for p in br.paragraphs:
-                    lines.append(p.rstrip())
+                if br.raw_text:
+                    for ln in br.raw_text.rstrip().splitlines():
+                        lines.append(ln.rstrip())
                     lines.append("")
+                else:
+                    for p in br.paragraphs:
+                        lines.append(p.rstrip())
+                        lines.append("")
                 op_map = {
                     "add": "+=",
                     "sub": "-=",
