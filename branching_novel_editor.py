@@ -1781,7 +1781,12 @@ class ChapterEditor(tk.Tk):
             return
 
         self._apply_body_to_model()
-        txt = self.story.serialize()
+
+        parser = StoryParser()
+        serialized = self.story.serialize().rstrip()
+        current = self.txt_preview.get("1.0", tk.END).rstrip("\n")
+        clean_current = "\n".join(parser._remove_comments(current.splitlines())).rstrip()
+        txt = current if clean_current == serialized else serialized
 
         self._preview_updating = True
         try:
