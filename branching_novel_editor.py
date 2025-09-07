@@ -1795,7 +1795,11 @@ class ChapterEditor(tk.Tk):
                 idx += 1
         if trailing:
             for c in trailing:
-                if c not in recent_comments:
+                # 중간 입력 과정에서 생성된 이전 주석 조각들이
+                # ``recent_comments`` 에 있는 최신 주석의 접두사/접미사로
+                # 남아 중복되는 문제가 있었다. 두 주석이 서로의 접두사
+                # 관계에 있으면 동일한 주석으로 간주하여 병합에서 제외한다.
+                if c not in recent_comments and not any(rc.startswith(c) or c.startswith(rc) for rc in recent_comments):
                     merged.append(c)
         return "\n".join(merged)
 
