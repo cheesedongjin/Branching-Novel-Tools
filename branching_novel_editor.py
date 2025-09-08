@@ -1790,7 +1790,10 @@ class ChapterEditor(tk.Tk):
                 for c in comments_before.get(idx, []):
                     if c not in existing:
                         merged.append(c)
-                        existing.add(c)
+                # ``existing`` is intentionally not updated here so that
+                # identical comment lines (e.g., block comment delimiters
+                # marked by lone ';') are preserved in their original order
+                # without being mistakenly deduplicated.
                 base = parser._strip_inline_comment(line)
                 if line[len(base):]:
                     merged.append(line)
