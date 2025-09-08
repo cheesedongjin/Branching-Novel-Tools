@@ -2028,6 +2028,13 @@ class ChapterEditor(tk.Tk):
                 text = f.read()
             parser = StoryParser()
             story = parser.parse(text)
+            # Restore comments in branch titles and bodies for editor views
+            branch_texts = parser.extract_branch_texts(text)
+            for bid, br in story.branches.items():
+                if bid in branch_texts:
+                    title, body = branch_texts[bid]
+                    br.title = title
+                    br.raw_text = body
         except ParseError as e:
             messagebox.showerror(tr("parse_error"), str(e))
             return
