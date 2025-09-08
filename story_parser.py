@@ -1,7 +1,7 @@
 import re
 import ast
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Union
+from typing import List, Dict, Optional, Union, Tuple
 
 @dataclass
 class Action:
@@ -322,6 +322,47 @@ class StoryParser:
             else:
                 raise ParseError("No branches found in story.")
         return story
+
+    def extract_branch_texts(self, text: str) -> Dict[str, Tuple[str, str]]:
+        """Extract branch titles (with inline comments) and raw body text.
+
+        The parser itself strips comments when building the ``Story`` model.
+        This helper scans the original ``text`` again to retrieve the raw
+        branch titles and body text including any comments so the editor can
+        display them in the branch editing tab.
+        """
+        lines = [ln.lstrip("\ufeff") for ln in text.splitlines()]
+        result: Dict[str, Tuple[str, str]] = {}
+        current_id: Optional[str] = None
+        current_title: str = ""
+        body: List[str] = []
+        for raw in lines:
+            stripped = raw.strip()
+            if stripped.startswith("#"):
+                if current_id is not None:
+                    result[current_id] = (current_title, "\n".join(body).rstrip())
+                content = raw.lstrip("#").strip()
+                if ":" in content:
+                    bid, title = content.split(":", 1)
+                    current_id = bid.strip()
+                    current_title = title.strip()
+                else:
+                    current_id = content.strip()
+                    current_title = current_id
+                body = []
+                continue
+            if current_id is None:
+                continue
+            if stripped.startswith(('@chapter', '@title:', '@start:', '@ending:',
+                                   '@show-disabled:')) or stripped.startswith("* ") or stripped.startswith("!"):
+                result[current_id] = (current_title, "\n".join(body).rstrip())
+                current_id = None
+                body = []
+                continue
+            body.append(raw)
+        if current_id is not None:
+            result[current_id] = (current_title, "\n".join(body).rstrip())
+        return result
 
     def _merge_paragraph_buffer(self, buffer: List[str]) -> List[str]:
         if not buffer:

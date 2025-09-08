@@ -1845,6 +1845,13 @@ class ChapterEditor(tk.Tk):
             if not silent:
                 messagebox.showerror(tr("parse_error"), str(e))
             return False
+        # 댓글이 포함된 원본에서 분기 제목과 본문을 다시 추출
+        branch_texts = parser.extract_branch_texts(txt)
+        for bid, br in story.branches.items():
+            if bid in branch_texts:
+                title, body = branch_texts[bid]
+                br.title = title
+                br.raw_text = body
         self.story = story
         self.current_branch_id = story.start_id
         br = self.story.get_branch(self.current_branch_id) if self.current_branch_id else None
