@@ -1790,7 +1790,12 @@ class ChapterEditor(tk.Tk):
                 for c in comments_before.get(idx, []):
                     if c not in existing:
                         merged.append(c)
-                merged.append(line + inline_comments.get(idx, ""))
+                        existing.add(c)
+                base = parser._strip_inline_comment(line)
+                if line[len(base):]:
+                    merged.append(line)
+                else:
+                    merged.append(line + inline_comments.get(idx, ""))
                 recent_comments = []
                 idx += 1
         if trailing:
