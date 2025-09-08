@@ -1780,9 +1780,17 @@ class ChapterEditor(tk.Tk):
         merged: List[str] = []
         recent_comments: List[str] = []
         idx = 0  # index for non-comment lines
+        in_block = False
         for line in upd_lines:
             stripped = line.strip()
-            if stripped.startswith(';'):
+            if stripped == ';':
+                merged.append(line)
+                recent_comments.append(line)
+                in_block = not in_block
+            elif in_block:
+                merged.append(line)
+                recent_comments.append(line)
+            elif stripped.startswith(';'):
                 merged.append(line)
                 recent_comments.append(line)
             else:

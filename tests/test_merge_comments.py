@@ -18,3 +18,10 @@ def test_block_comment_not_duplicated_after_multiple_merges():
     second = _merge(editor, first, updated)
     assert first == second == ';\nblock\n;\nline1'
 
+
+def test_block_comment_at_end_not_duplicated_when_merging_same():
+    editor = ChapterEditor.__new__(ChapterEditor)
+    original = 'line1\n;\nblock\n;\n'
+    merged = _merge(editor, original, original)
+    assert merged == original.rstrip()
+
