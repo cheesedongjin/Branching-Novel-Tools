@@ -1,84 +1,67 @@
 # Branching Novel Tools
 
-Branching Novel Tools is a lightweight toolkit for creating interactive stories
-that branch based on player choices. It pairs a simple `.bnov` text format with
-Python-based viewer and editor applications, letting writers draft and test
-visual novels without a complex build process. Key features include:
+Branching Novel Tools는 플레이어의 선택에 따라 분기되는 인터랙티브 스토리를 만들 수 있는 경량 도구 모음입니다. 간단한 `.bnov` 텍스트 포맷과 Python 기반의 뷰어 및 에디터 애플리케이션이 함께 제공되어, 작가들이 복잡한 빌드 과정 없이 비주얼 노벨을 작성하고 테스트할 수 있도록 돕습니다. 주요 기능은 다음과 같습니다:
 
-- Plain-text scripts that work well with version control.
-- A reference viewer for playing stories locally.
-- Optional editor utilities for previewing and authoring narratives.
+- 버전 관리와 잘 어울리는 순수 텍스트 스크립트
+- 로컬에서 스토리를 재생해 볼 수 있는 레퍼런스 뷰어
+- 내러티브 미리보기 및 작성에 도움이 되는 선택적 에디터 유틸리티
 
-## Branching Novel Script Syntax
+## Branching Novel 스크립트 문법
 
-Branching Novel Script is a plain-text format for writing branching visual
-novels. Scripts usually use the `.bnov` extension and must be encoded in UTF-8.
+Branching Novel 스크립트는 분기형 비주얼 노벨을 작성하기 위한 순수 텍스트 포맷입니다. 스크립트는 보통 `.bnov` 확장자를 사용하며 UTF-8로 인코딩되어야 합니다.
 
-## Metadata lines
+## 메타데이터 라인
 
-Directives at the top of the file configure global story settings:
+파일 상단의 지시문은 전역 스토리 설정을 구성합니다:
 
-- `@title: <title>` – story title (`Untitled` if omitted).
-- `@start: <branch_id>` – starting branch id (defaults to the first branch in the file).
-- `@ending: <text>` – message shown when the story ends with no choices (`The End` by default).
-- `@show-disabled: true` – display unavailable choices as disabled buttons.
-- `! <var> = <value or expression>` – define an initial variable before any chapter. Expressions may reference previously defined variables.
+- `@title: <title>` – 스토리 제목 (`Untitled`가 기본값).
+- `@start: <branch_id>` – 시작할 브랜치 ID (생략 시 파일의 첫 브랜치).
+- `@ending: <text>` – 선택지가 없을 때 표시될 메시지 (`The End`가 기본값).
+- `@show-disabled: true` – 사용할 수 없는 선택지를 비활성화된 버튼으로 표시.
+- `! <var> = <value or expression>` – 어떤 챕터보다 먼저 초기 변수를 정의. 표현식에서는 이전에 정의된 변수를 참조할 수 있음.
 
-## Chapters and branches
+## 챕터와 브랜치
 
-- `@chapter <chapter_id>: <title>` – declare a chapter; the title is optional.
-- `# <branch_id>: <title>` – begin a branch inside the current chapter; the title is optional.
+- `@chapter <chapter_id>: <title>` – 챕터 선언; 제목은 선택 사항.
+- `# <branch_id>: <title>` – 현재 챕터 내의 브랜치 시작; 제목은 선택 사항.
 
-Chapter and branch identifiers must be unique across the file.
+챕터와 브랜치 ID는 파일 전체에서 고유해야 합니다.
 
-## Narrative paragraphs and interpolation
+## 서술 단락과 치환
 
-Inside a branch, plain text lines form the body. Blank lines separate
-paragraphs. Any `__var__` tokens in titles, paragraph text, or choice labels are
-replaced with the current value of that variable; if the variable is undefined
-the placeholder remains unchanged.
+브랜치 내부에서는 일반 텍스트 줄이 본문을 이룹니다. 빈 줄은 단락을 구분합니다. 제목, 단락 텍스트, 선택지 레이블에 있는 `__var__` 토큰은 해당 변수의 현재 값으로 치환되며, 변수가 정의되지 않은 경우 토큰이 그대로 남습니다.
 
-Variable names may contain letters, digits and underscores but cannot start or
-end with `_` or contain `__`.
+변수 이름은 문자, 숫자, 밑줄을 포함할 수 있지만 `_`로 시작하거나 끝날 수 없고 `__`를 포함할 수 없습니다.
 
-## State actions
+## 상태 동작
 
-Lines beginning with `!` inside a branch modify variables. Supported forms are
+브랜치 내부에서 `!`로 시작하는 줄은 변수를 변경합니다. 지원되는 형태는 다음과 같습니다:
 
-- `! <var> = <value or expression>` – assignment. If the right-hand side is not a literal it is evaluated as an expression.
-- `! <var> += <value>`, `-=`, `*=`, `/=`, `//=`, `%=` , `**=` – arithmetic updates.
-- `! set <var> = <value>` and `! add <var> += <value>` – explicit assignment and addition.
+- `! <var> = <value or expression>` – 대입. 오른쪽이 리터럴이 아니면 표현식으로 평가됩니다.
+- `! <var> += <value>`, `-=`, `*=`, `/=`, `//=`, `%=` , `**=` – 산술 갱신.
+- `! set <var> = <value>` 및 `! add <var> += <value>` – 명시적 대입과 덧셈.
 
-Values may be numbers, strings, booleans (`true`/`false`) or other variable names.
-When used with arithmetic operators booleans are treated as `0` or `1`.
-Undefined variables evaluate to `0`.
+값은 숫자, 문자열, 불리언(`true`/`false`) 또는 다른 변수 이름이 될 수 있습니다. 산술 연산에서는 불리언이 `0` 또는 `1`로 처리됩니다. 정의되지 않은 변수는 `0`으로 평가됩니다.
 
-## Choices
+## 선택지
 
-- `* <text> -> <target_branch_id>` – create a choice leading to another branch.
-- `* [<condition>] <text> -> <target_branch_id>` – conditional choice.
+- `* <text> -> <target_branch_id>` – 다른 브랜치로 이동하는 선택지를 만듭니다.
+- `* [<condition>] <text> -> <target_branch_id>` – 조건부 선택지.
 
-## Condition and expression syntax
+## 조건과 표현식 문법
 
-Conditions and expressions support:
+조건과 표현식은 다음을 지원합니다:
 
-- Variables, numeric literals, quoted strings, and `true`/`false` (case-insensitive).
-- Arithmetic: `+ - * / // % **` and unary `-`.
-- Comparisons: `== != < <= > >=`.
-- Logical operators: `!` (not), `&`/`&&` (and), `|`/`||` (or).
-- Parentheses for grouping.
-- Assignment expressions such as `x = 1` or `x += 2`. When a condition
-  contains only assignments the choice is still shown. If assignments and
-  other tests are combined with `and`, each part runs from left to right and
-  all non-assignment expressions must evaluate to true.
+- 변수, 숫자 리터럴, 따옴표로 감싼 문자열, `true`/`false` (대소문자 무관).
+- 산술 연산: `+ - * / // % **` 및 단항 `-`.
+- 비교 연산: `== != < <= > >=`.
+- 논리 연산자: `!` (NOT), `&`/`&&` (AND), `|`/`||` (OR).
+- 괄호를 이용한 그룹화.
+- `x = 1` 또는 `x += 2`와 같은 대입 표현식. 조건이 대입만으로 구성된 경우에도 선택지는 표시됩니다. `and`로 대입과 다른 테스트가 함께 사용되면 왼쪽에서 오른쪽으로 실행되며, 대입이 아닌 표현식은 모두 참이어야 합니다.
 
-Lines starting with `;` are treated as comments and ignored. A line containing
-only `;` begins a block comment that continues until another lone `;` line is
-encountered. Inline comments can also follow any statement when `;` appears
-after some whitespace; everything to the right of the semicolon is ignored.
-Empty lines still serve only as paragraph separators.
+`;`로 시작하는 줄은 주석으로 처리되어 무시됩니다. 내용이 없는 `;` 한 줄은 다음에 또 다른 단독 `;`가 나올 때까지 블록 주석을 시작합니다. 또한 공백 뒤에 `;`가 등장하면 인라인 주석으로 간주되어 그 뒤의 내용은 무시됩니다. 빈 줄은 여전히 단락 구분용으로만 사용됩니다.
 
-## Example
+## 예시
 
 ```bnov
 @title: Sample Adventure
@@ -99,16 +82,12 @@ You wake up with __coins__ coins.
 * [coins >= 10] Buy a snack -> shop
 ```
 
-## Running the viewer
+## 뷰어 실행
 
 ```
 python branching_novel.py path/to/story.bnov
 ```
 
-## Localization
+## 현지화
 
-Interface strings are loaded from JSON files located in a `locales` directory
-next to the executable. To add a new language, drop a file named
-`<lang>.json` in this folder containing translated key/value pairs. For
-example, placing `locales/fr.json` alongside the program enables French
-translations.
+인터페이스 문자열은 실행 파일과 같은 위치에 있는 `locales` 디렉터리의 JSON 파일에서 로드됩니다. 새 언어를 추가하려면 번역된 키/값 쌍을 담은 `<lang>.json` 파일을 이 폴더에 넣으면 됩니다. 예를 들어, 프로그램과 함께 `locales/fr.json`을 배치하면 프랑스어 번역이 활성화됩니다.
