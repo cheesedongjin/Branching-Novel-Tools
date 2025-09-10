@@ -1,5 +1,7 @@
 # Branching Novel Tools
 
+[English README](README.en.md)
+
 Branching Novel Tools는 플레이어의 선택에 따라 분기되는 인터랙티브 스토리를 만들 수 있는 경량 도구 모음입니다. 간단한 `.bnov` 텍스트 포맷과 Python 기반의 뷰어 및 에디터 애플리케이션이 함께 제공되어, 작가들이 복잡한 빌드 과정 없이 비주얼 노벨을 작성하고 테스트할 수 있도록 돕습니다. 주요 기능은 다음과 같습니다:
 
 - 버전 관리와 잘 어울리는 순수 텍스트 스크립트
